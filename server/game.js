@@ -434,7 +434,7 @@ export class Game {
     const def = STRUCTS[d.t]; if (!def) return;
     if ([d.x, d.y, d.z].some(v => typeof v !== 'number' || !isFinite(v))) return;
     const x = r2(d.x), y = r2(d.y), z = r2(d.z), r = (d.r | 0) & 3;
-    if (Math.hypot(x - p.x, z - p.z) > 45 || Math.abs(y - heightAt(x, z)) > 16 || Math.abs(x) > EDGE || Math.abs(z) > EDGE) return { err: 'Too far away' };
+    if (Math.hypot(x - p.x, z - p.z) > 45 || Math.abs(y - heightAt(x, z)) > 24 || Math.abs(x) > EDGE || Math.abs(z) > EDGE) return { err: 'Too far away' };
     if (heightAt(x, z) < 0.2 && def.kind !== 'foundation') { /* building over water needs a foundation under it */ if (y < 0.5) return { err: 'Too wet here — put a foundation down first' }; }
     if (this.lvl(p, 'building') < def.lvl) return { err: `Needs Building level ${def.lvl}` };
     if (def.needs ? !this.count(p, def.needs) : (!def.free && !this.count(p, 'hammer'))) return { err: def.needs ? 'You need a Hoe for that' : 'You need a Building Hammer (craft one with C)' };
@@ -446,17 +446,18 @@ export class Game {
     }
     for (const k in def.cost) this.take(p, k, def.cost[k]);
     const s = { id: this.nextId++, t: d.t, x, y, z, r, o: p.id, on: p.name, d: {} };
+    if (def.gable && Number.isInteger(d.v) && d.v >= 0 && d.v <= 14) s.v = d.v;          // gable shape: sloped left, sloped right, or peak
     this.structs.set(s.id, s); this.dirty = true; this.inv(s); this.clearNodes(s);
     this.io.to('game').emit('st+', this.spub(s));
     this.xp(p, 'building', 6 + Object.values(def.cost).reduce((a, b) => a + b, 0));
-    this.quest(p, 'build:' + d.t); if (def.kind === 'roof') this.quest(p, 'build:roof');
+    this.quest(p, 'build:' + d.t); if (def.kind === 'roof' || def.kind === 'slope') this.quest(p, 'build:roof');
     return { ok: 1 };
   }
   onDemolish(p, d) {
     const s = this.structs.get(d.id); if (!s || !this.near(p, s, 8)) return;
     if (!this.canUse(p, s)) return this.toast(p, `That belongs to ${s.on}`, 'bad');
     if (s.d.inv?.some(Boolean)) return this.toast(p, 'Take everything out of its storage first', 'bad');
-    if (STRUCTS[s.t].kind === 'foundation') for (const o of this.structs.values()) { const k = STRUCTS[o.t].kind; if (o !== s && (k === 'stairs' || k === 'floor' || k === 'roof') && Math.abs(o.x - s.x) < .3 && Math.abs(o.z - s.z) < .3) return this.toast(p, `Take the ${STRUCTS[o.t].n} off this foundation first`, 'bad'); }
+    if (STRUCTS[s.t].kind === 'foundation') for (const o of this.structs.values()) { const k = STRUCTS[o.t].kind; if (o !== s && (k === 'stairs' || k === 'floor' || k === 'roof' || k === 'slope') && Math.abs(o.x - s.x) < .3 && Math.abs(o.z - s.z) < .3) return this.toast(p, `Take the ${STRUCTS[o.t].n} off this foundation first`, 'bad'); }
     this.structs.delete(s.id); this.dirty = true; this.io.to('game').emit('st-', s.id);
     const cost = STRUCTS[s.t].cost; for (const k in cost) this.give(p, k, Math.floor(cost[k] / 2));
   }

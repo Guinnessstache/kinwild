@@ -163,7 +163,7 @@ function rebuildCol() {
   for (const s of S.structs.values()) {
     const d = STRUCTS[s.t];
     if (d.kind === 'foundation' || d.kind === 'floor') col.surf.push({ x0: s.x - 2, x1: s.x + 2, z0: s.z - 2, z1: s.z + 2, top: s.y, solid: d.kind === 'foundation' });
-    if (d.kind === 'floor' || d.kind === 'roof') col.ceil.push({ x0: s.x - 2.3, x1: s.x + 2.3, z0: s.z - 2.3, z1: s.z + 2.3, y: s.y });
+    if (d.kind === 'floor' || d.kind === 'roof' || d.kind === 'slope') col.ceil.push({ x0: s.x - 2.3, x1: s.x + 2.3, z0: s.z - 2.3, z1: s.z + 2.3, y: s.y });
     if (d.kind === 'stairs') col.surf.push({ x0: s.x - 2, x1: s.x + 2, z0: s.z - 2, z1: s.z + 2, stairs: true, y: s.y, cx: s.x, cz: s.z, dx: Math.sin(s.r * Math.PI / 2), dz: Math.cos(s.r * Math.PI / 2) });
     else if (d.kind === 'wall') {
       const ax = s.r % 2 === 0 ? 1 : 0, az = 1 - ax, seg = (a, b) => col.walls.push({ x1: s.x + ax * a, z1: s.z + az * a, x2: s.x + ax * b, z2: s.z + az * b, y0: s.y, y1: s.y + d.h });
@@ -348,6 +348,7 @@ function stations() { const out = {}; for (const s of S.structs.values()) { cons
 
 // ---------- building ----------
 function startBuild(t) { stopBuild(); S.build = { t, r: 0, lvl: 0, ghost: G.ghostOf({ t, d: {} }) }; scene.add(S.build.ghost); buildBar(); lock(); }
+function ghostShape(v) { const b = S.build; if (!b || b.v === v) return; b.v = v; const pos = b.ghost.position.clone(), rot = b.ghost.rotation.y; scene.remove(b.ghost); b.ghost = G.ghostOf({ t: b.t, d: {}, v }); b.ghost.position.copy(pos); b.ghost.rotation.y = rot; scene.add(b.ghost); }       // gables change shape to fit the roof
 function stopBuild() { if (!S.build) return; scene.remove(S.build.ghost); S.build = null; S.fly = null; $('buildbar').hidden = true; }
 // Free camera for building: the view leaves the character and flies around so you can see roofs and tight corners.
 function toggleFly() { S.fly = S.fly ? null : { x: camera.position.x, y: camera.position.y, z: camera.position.z }; buildBar(); if (S.fly) ui.toast(padUI() ? 'Free camera: left stick fly, A up, LT down, L3 faster. R3 returns to your character.' : 'Free camera: WASD fly, Space up, Shift down, Ctrl faster. V returns to your character.'); }
@@ -360,9 +361,12 @@ function buildBar() {
   $('buildbar').hidden = false;
   $('buildbar').innerHTML = `${d.i} <b>${d.n}</b> &nbsp; <kbd>${p ? 'RT' : 'Click'}</kbd>place <kbd>${p ? 'X' : 'R'}</kbd>turn ${d.kind !== 'place' && d.kind !== 'foundation' ? `<kbd>${p ? 'Y' : 'Z'}</kbd>level ${(S.build.L ?? S.build.lvl) + 1} ` : ''}<kbd>${p ? 'R3' : 'V'}</kbd>${S.fly ? 'walk view' : 'free camera'} <kbd>${p ? 'B' : 'Esc'}</kbd>done<div class="need">Needs: ${ui.costHtml(d.cost)}</div>${hint ? `<div class="need hint">${hint}</div>` : ''}`;
 }
+// world direction for each rotation: 0 = +z, 1 = +x, 2 = -z, 3 = -x
+const DIRS = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+const faceDir = () => { const [fx, fz] = fwd(); return Math.abs(fx) > Math.abs(fz) ? (fx > 0 ? 1 : 3) : (fz > 0 ? 0 : 2); };
 function placement() {
-  const b = S.build, d = STRUCTS[b.t], [fx, fz] = fwd(), reach = d.kind === 'place' || d.kind === 'stairs' ? 2.6 : d.kind === 'roof' || d.kind === 'floor' ? 1.5 : 4.2 + cam.pitch * 2;      // roofs and ceilings go over the square you stand in (or are stepping into)
-  const aim = S.fly ? flyAim(me.y + 3 * b.lvl) : null;         // in free camera you aim with the middle of the screen
+  const b = S.build, d = STRUCTS[b.t], [fx, fz] = fwd(), reach = d.kind === 'place' || d.kind === 'stairs' ? 2.6 : d.kind === 'roof' || d.kind === 'slope' || d.kind === 'floor' ? 1.5 : 4.2 + cam.pitch * 2;      // roofs and ceilings go over the square you stand in (or are stepping into)
+  const aim = S.fly ? flyAim(me.y + 3 * b.lvl + (d.kind === 'roof' || d.kind === 'slope' || d.gable ? 3 : 0)) : null;         // in free camera you aim with the middle of the screen
   const ax = aim ? aim[0] : me.x + fx * reach, az = aim ? aim[1] : me.z + fz * reach, cx = Math.round(ax / 4) * 4, cz = Math.round(az / 4) * 4;
   let base = null, bd = 11; for (const s of S.structs.values()) if (STRUCTS[s.t].kind === 'foundation') { const q = Math.hypot(s.x - cx, s.z - cz); if (q < bd && Math.abs(s.y - me.y) < 7) { bd = q; base = s.y; } }
   base ??= Math.max(heightAt(cx - 2, cz - 2), heightAt(cx + 2, cz - 2), heightAt(cx - 2, cz + 2), heightAt(cx + 2, cz + 2), .2) + .35;
@@ -378,11 +382,30 @@ function placement() {
       const wx = aim ? aim[0] : me.x + fx * 3, wz = aim ? aim[1] : me.z + fz * 3, ex = Math.round((wx - 2) / 4) * 4 + 2, ez = Math.round((wz - 2) / 4) * 4 + 2;
       const side = Math.abs(wx - ex) < Math.abs(wz - ez), x = side ? ex : Math.round(wx / 4) * 4, z = side ? Math.round(wz / 4) * 4 : ez, r = side ? 1 : 0;
       if (b.t === 'fence' && bd > 10) return { x, y: heightAt(x, z), z, r };
+      if (d.gable) {          // fit the roof beside this wall: under a slope it is a sloped triangle, under a ridge a peak
+        const side = r === 1 ? [[x - 2, z], [x + 2, z]] : [[x, z - 2], [x, z + 2]], lx = r === 1 ? [0, -1] : [1, 0];      // the wall's own +x direction in the world
+        for (const s of S.structs.values()) { const k = STRUCTS[s.t].kind; if (k !== 'slope' && k !== 'roof') continue; if (!side.some(([sx, sz]) => Math.abs(s.x - sx) < .3 && Math.abs(s.z - sz) < .3)) continue;
+          let shape; if (k === 'slope') { const dv = DIRS[s.r]; if (dv[0] * lx[1] - dv[1] * lx[0] !== 0) continue; shape = dv[0] * lx[0] + dv[1] * lx[1] > 0 ? 0 : 1; } else if (s.r % 2 !== r % 2) shape = 2; else continue;
+          // reach down to the top of the wall under this edge, so a higher row of slopes leaves no gap
+          let top = s.y; for (const w of S.structs.values()) { const wd = STRUCTS[w.t]; if (wd.kind === 'wall' && !wd.gable && w.t !== 'fence' && w.r === r && Math.abs(w.x - x) < .3 && Math.abs(w.z - z) < .3 && w.y + 3 <= s.y + .3) top = Math.min(top, Math.max(w.y + 3, s.y - 8)); }
+          const band = Math.max(0, Math.min(4, Math.round((s.y - top) / 2)));
+          return { x, y: s.y - 2 * band, z, r, v: shape + 3 * band };
+        }
+      }
       const max = d.gable ? 3 : 2; while (L < max && occ('wall', x, base + 3 * L, z, r)) L++;
       return { x, y: base + 3 * L, z, r, L };
     }
     case 'floor': while (L < 2 && occ('floor', cx, base + 3 * (L + 1), cz)) L++; return { x: cx, y: base + 3 * (L + 1), z: cz, r: 0, L };
-    case 'roof': L = Math.max(L, wallTop()); return { x: cx, y: base + 3 * (L + 1), z: cz, r: b.r % 2, L };
+    case 'slope': {           // rises away from where you look (R to turn it); stacks onto the high edge of the slope below it
+      let r = b.turned ? b.r : faceDir(), y = base + 3 * (Math.max(L, wallTop()) + 1);
+      for (const s of S.structs.values()) if (STRUCTS[s.t].kind === 'slope' && (!b.turned || s.r === r)) { const dv = DIRS[s.r]; if (Math.abs(s.x + 4 * dv[0] - cx) < .3 && Math.abs(s.z + 4 * dv[1] - cz) < .3) { r = s.r; y = s.y + 2; break; } }
+      return { x: cx, y, z: cz, r, L: Math.round((y - base) / 3) - 1 };
+    }
+    case 'roof': {            // a ridge sits on the high edges of the slopes beside it, along their line
+      let r = b.turned ? b.r % 2 : faceDir() % 2, y = base + 3 * (Math.max(L, wallTop()) + 1);
+      for (const s of S.structs.values()) if (STRUCTS[s.t].kind === 'slope') { const dv = DIRS[s.r]; if (Math.abs(s.x + 4 * dv[0] - cx) < .3 && Math.abs(s.z + 4 * dv[1] - cz) < .3) { r = s.r % 2; y = s.y + 2; break; } }
+      return { x: cx, y, z: cz, r, L: Math.round((y - base) / 3) - 1 };
+    }
     case 'stairs': {          // a flight placed just past the top of another one continues it: same direction, one level up (4 flights high)
       let r = b.r;
       for (const s of S.structs.values()) if (STRUCTS[s.t].kind === 'stairs') {
@@ -395,7 +418,7 @@ function placement() {
     default: { const x = Math.round(ax * 2) / 2, z = Math.round(az * 2) / 2; return { x, y: groundAt(x, z, me.y + .5), z, r: b.r }; }
   }
 }
-function placeBuild() { const { x, y, z, r } = placement(); emit('place', { t: S.build.t, x, y, z, r }, r => { if (r?.err) ui.toast(r.err, 'bad'); else if (r?.ok) sound('place'); }); }
+function placeBuild() { const { x, y, z, r, v } = placement(); emit('place', { t: S.build.t, x, y, z, r, v }, r => { if (r?.err) ui.toast(r.err, 'bad'); else if (r?.ok) sound('place'); }); }
 
 // ---------- targeting ----------
 function nextPiece() { const l = S.hamList; if (!l || l.length < 2) return; const i = l.findIndex(o => o.s.id === (S.target?.s?.id)); S.hamSel = l[(i + 1) % l.length].s.id; sound('pick'); }
@@ -406,7 +429,7 @@ function findTarget() {
   nodesNear(me.x, me.z, n => consider(n.x, n.z, 3.6, { k: 'n', node: n, x: n.x, y: n.y, z: n.z, r: (NODES[n.t].r || .5) * n.s + .25 }));
   // With the hammer every piece in reach is a candidate, and things built on top (roof, stairs, upper floor)
   // are offered before the foundation under them, which sits at the same spot. T / B steps through the rest.
-  const HB = { roof: -.9, stairs: -.7, floor: -.5, place: -.3, wall: -.2, foundation: 0 }, list = [];
+  const HB = { roof: -.9, slope: -.9, stairs: -.7, floor: -.5, place: -.3, wall: -.2, foundation: 0 }, list = [];
   for (const s of S.structs.values()) {
     const d = STRUCTS[s.t];
     const o = { k: 's', s, x: s.x, y: s.y, z: s.z, r: d.kind === 'place' ? (d.r || 1.3) + .3 : 1.2 };
@@ -677,7 +700,7 @@ function frame() {
     // targeting + prompt
     S.target = S.build ? null : findTarget();
     if (S.target) { const t = S.target; ring.visible = true; ring.position.set(t.x, Math.max(t.y, groundAt(t.x, t.z, me.y + 2)) + .12, t.z); ring.scale.setScalar(t.r * (1 + Math.sin(time * 5) * .05)); } else ring.visible = false;
-    if (S.build) { const p = placement(), g = S.build.ghost; g.position.set(p.x, p.y, p.z); g.rotation.y = p.r * Math.PI / 2; if ((p.L ?? null) !== (S.build.L ?? null)) { S.build.L = p.L; buildBar(); } }
+    if (S.build) { const p = placement(); if (STRUCTS[S.build.t].gable) ghostShape(p.v); const g = S.build.ghost; g.position.set(p.x, p.y, p.z); g.rotation.y = p.r * Math.PI / 2; if ((p.L ?? null) !== (S.build.L ?? null)) { S.build.L = p.L; buildBar(); } }
     netT += dt; if (netT > .08) { netT = 0; const m = [+me.x.toFixed(2), +me.y.toFixed(2), +me.z.toFixed(2), +me.yaw.toFixed(2), me.mode]; const key = m.join(); if (key !== lastSent) { lastSent = key; sock.volatile.emit('mv', m); } }
     slowT += dt; if (slowT > .25) {
       slowT = 0; $('prompt').innerHTML = ui.tab ? '' : promptFor(S.target); $('bStam').style.width = S.stam + '%'; drawMini();

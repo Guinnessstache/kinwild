@@ -60,6 +60,12 @@ Each player picks a name and a PIN. Same name + PIN brings the character back on
 
 The "Next step" box walks new players through 19 steps from punching a tree to forging iron.
 
+## Build 9 changes
+
+- Roofs are now angled **Roof Slope** pieces that snap together. A slope rises away from where you're facing (R turns it), and a slope placed behind another stacks on top of it, so any house width works.
+- **Roof Ridge** caps the middle row on odd-width houses. **Gables** (roof end walls) shape themselves to the roof above them and fill down to the wall top.
+- Old thatch roof pieces still work and show as ridges.
+
 ## Build 8 changes
 
 - **Much bigger land**: about 1.5 km² of land, roughly 7 times the old island. The original island is unchanged in the middle.

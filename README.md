@@ -60,6 +60,16 @@ Each player picks a name and a PIN. Same name + PIN brings the character back on
 
 The "Next step" box walks new players through 19 steps from punching a tree to forging iron.
 
+## Build 10 changes
+
+- **New build mode.** Press **B** (controller: D-pad →) to start building. A palette at the bottom shows the pieces: **1–6** pick a type, the **mouse wheel** or **Q/E** (LB/RB) pick a piece. No more menus.
+- **Aim with the dot.** Pieces snap to what the middle of the screen points at. Point at the edge of a foundation, floor or roof piece to add the next one beside it; point at a wall to stack another on top; point at a wall top to put a roof or ceiling over that room.
+- **Right-click removes** the piece outlined in red (controller: Y), anywhere you can see it. You get half the materials back. The hammer also takes apart exactly the piece under the dot with a click.
+- **F flies the camera** while building (controller: R3) and stays on while you switch pieces.
+- **V toggles first-person view** (controller: R3 outside build mode).
+- **Roof ends close themselves.** The last roof slope or ridge in a row gets a triangle end wall automatically, filled down to the wall top on wider houses, so gables are optional.
+- The ghost piece turns red when you can't afford it.
+
 ## Build 9 changes
 
 - Roofs are now angled **Roof Slope** pieces that snap together. A slope rises away from where you're facing (R turns it), and a slope placed behind another stacks on top of it, so any house width works.

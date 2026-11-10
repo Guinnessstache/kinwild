@@ -454,7 +454,7 @@ export class Game {
     return { ok: 1 };
   }
   onDemolish(p, d) {
-    const s = this.structs.get(d.id); if (!s || !this.near(p, s, 8)) return;
+    const s = this.structs.get(d.id); if (!s || !this.near(p, s, 50)) return;        // build mode can reach as far as the flying camera
     if (!this.canUse(p, s)) return this.toast(p, `That belongs to ${s.on}`, 'bad');
     if (s.d.inv?.some(Boolean)) return this.toast(p, 'Take everything out of its storage first', 'bad');
     if (STRUCTS[s.t].kind === 'foundation') for (const o of this.structs.values()) { const k = STRUCTS[o.t].kind; if (o !== s && (k === 'stairs' || k === 'floor' || k === 'roof' || k === 'slope') && Math.abs(o.x - s.x) < .3 && Math.abs(o.z - s.z) < .3) return this.toast(p, `Take the ${STRUCTS[o.t].n} off this foundation first`, 'bad'); }

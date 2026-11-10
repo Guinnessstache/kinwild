@@ -75,6 +75,14 @@ input:focus { outline: none; border-color: var(--gold); }
 #hud > #hotbar { z-index: 12; }
 #buildbar { left: 50%; bottom: 96px; transform: translateX(-50%); background: var(--bg); border: 2px solid var(--good); border-radius: 12px; padding: 6px 14px; font-weight: 700; white-space: nowrap; text-align: center; }
 #buildbar .need { margin-top: 4px; font-size: 14px; } #buildbar .hint { color: #ffd98a; font-weight: 400; }
+#buildbar { bottom: 14px; padding: 8px 14px 6px; max-width: 96vw; white-space: normal; }
+.bcats, .btiles { display: flex; gap: 5px; justify-content: center; align-items: center; flex-wrap: wrap; }
+.bcat { font-size: 13px; padding: 2px 8px; border-radius: 8px; background: rgba(0,0,0,.25); color: var(--dim); } .bcat small { opacity: .7; margin-right: 4px; }
+.bcat.on { background: var(--good); color: #13200d; }
+.btiles { margin: 6px 0 4px; } .btile { position: relative; width: 46px; height: 46px; display: grid; place-items: center; font-size: 26px; border: 3px solid #6b5033; border-radius: 9px; background: rgba(38,27,17,.85); }
+.btile .svgi, .btile svg { width: 30px; height: 30px; } .btile.on { border-color: #ffe08a; box-shadow: 0 0 0 2px #ffe08a; } .btile.short { opacity: .75; border-color: #a0503a; } .btile.lock { opacity: .35; }
+.btile em { position: absolute; bottom: -2px; left: 0; right: 0; font: 700 10px inherit; font-style: normal; color: #fff; text-shadow: 0 1px 2px #000; }
+.bname { font-size: 16px; } .bname .bad { color: #ff9a7a; } .bkeys { margin-top: 4px; font-size: 13px; font-weight: 400; color: var(--dim); } .bkeys b { color: #fff; }
 .svgi { vertical-align: -.14em; }
 .card.can { border-color: #6fae52; } .card .cost { clear: none; } .card .ing { display: block; margin: 0; } .card .hint { display: block; clear: both; color: #ffd98a; margin-top: 3px; }
 .menu { max-width: 620px; margin: 0 auto; } .menu .big { width: 100%; font-size: 19px; padding: 10px; margin-bottom: 14px; }

@@ -7,6 +7,7 @@ import { createUI } from './ui.js';
 
 const $ = id => document.getElementById(id);
 const S = window.S = { me: null, id: null, players: new Map(), animals: new Map(), structs: new Map(), dead: new Set(), time: .3, clan: null, invites: [], chest: null, sel: 0, build: null, off: 0, keys: {}, stam: 100, target: null, sneak: false, fishing: false, stock: {}, who: [], party: null, pinv: null, trade: null, tradeAsk: null, voice: new Set(), cd: {}, fly: null, recall: null };
+try { S.view = localStorage.kwView === 'first' ? 'first' : 'third'; } catch { S.view = 'third'; }
 const sock = io({ transports: ['websocket', 'polling'] });
 const emit = (ev, d, cb) => sock.emit(ev, d ?? {}, cb);
 
@@ -155,7 +156,8 @@ function recolor() { const l = myLevel(); for (const a of S.animals.values()) a.
 const col = { surf: [], walls: [], circ: [], ceil: [] };
 function addStruct(s) {
   const old = S.structs.get(s.id); if (old) scene.remove(old.g);
-  s.g = G.makeStruct(s, s.cc); s.g.position.set(s.x, s.y, s.z); s.g.rotation.y = s.r * Math.PI / 2; scene.add(s.g); S.structs.set(s.id, s); syncStruct(s); rebuildCol();
+  S.structs.set(s.id, s); if (!S.bulk) { s.cap = capsOf(s); s.capKey = s.cap?.join(); }
+  placeMesh(s); syncStruct(s); if (!S.bulk) { rebuildCol(); if (STRUCTS[s.t].kind === 'slope' || STRUCTS[s.t].kind === 'roof' || STRUCTS[s.t].gable) refreshCaps(s.x, s.z); }
 }
 function syncStruct(s) { const u = s.g.userData; if (u.door) u.door.rotation.y = s.d.open ? -1.7 : 0; G.setCrop(s.g, s.d, Date.now() + S.off); }
 function rebuildCol() {
@@ -187,7 +189,7 @@ function start(init) {
   refreshMe({ name: init.me.name, look: init.me.look, armor: ITEMS[init.me.equip.chest?.id]?.mat, tag: S.clan?.tag, col: S.clan?.color });
   S.party = init.party.party; S.pinv = init.party.inv; S.voice = new Set(init.voice); partyHud();
   for (const id of init.dead) { S.dead.add(id); world.setNode(id, false); }
-  init.players.forEach(addPlayer); init.animals.forEach(addAnimal); init.structs.forEach(addStruct);
+  init.players.forEach(addPlayer); init.animals.forEach(addAnimal); S.bulk = true; init.structs.forEach(addStruct); S.bulk = false; rebuildCol(); refreshCaps();
   music.start();
   $('login').hidden = true; $('hud').hidden = false; ui.refresh(); ui.vitals();
   ui.toast(`Welcome to Kinwild, ${init.me.name}!`, 'big'); if (init.me.quest === 0) ui.toast('Click the game to look around. Press H for help.');
@@ -205,7 +207,7 @@ sock.on('s', sn => {
 });
 sock.on('me', u => { Object.assign(S.me, u); if (u.hp != null || u.max) ui.vitals(); if (u.skills) recolor(); if (u.inv || u.skills || u.quest != null || u.known || u.perm) { ui.refresh(); buildBar(); } });
 sock.on('nd', ([id, alive]) => { alive ? S.dead.delete(id) : S.dead.add(id); world.setNode(id, !!alive); });
-sock.on('st+', s => S.me && addStruct(s)); sock.on('st-', id => { const s = S.structs.get(id); if (s) { scene.remove(s.g); S.structs.delete(id); rebuildCol(); } });
+sock.on('st+', s => S.me && addStruct(s)); sock.on('st-', id => { const s = S.structs.get(id); if (s) { scene.remove(s.g); S.structs.delete(id); rebuildCol(); refreshCaps(s.x, s.z); if (S.build?.hit?.s === s) S.build.hit = null; } });
 sock.on('st~', u => { const s = S.structs.get(u.id); if (!s) return; if (u.d) s.d = u.d; if ('c' in u) { s.c = u.c; if (s.t === 'clan_banner' && u.cc !== s.cc) { s.cc = u.cc; return addStruct(s); } } syncStruct(s); rebuildCol(); });
 sock.on('toast', t => ui.toast(t.m, t.k)); sock.on('chat', c => ui.chat(c));
 sock.on('got', g => { ui.feed(`+${g.n} ${ITEMS[g.id].i} <span ${g.q ? `style="color:${QUAL[g.q][1]}"` : ''}>${g.q ? QUAL[g.q][0] + ' ' : ''}${ITEMS[g.id].n}</span>`); });
@@ -244,16 +246,23 @@ addEventListener('keydown', e => {
   if (e.code === 'Escape') { if (performance.now() - lockLostT < 400) return; escT = performance.now(); if (S.build) stopBuild(); else if (ui.tab) ui.close(); else ui.open('menu'); return; }
   if (e.code === 'Enter') { $('chatin').focus(); document.exitPointerLock?.(); e.preventDefault(); return; }       // focus first so losing the mouse capture is not read as Esc
   const tabs = { Tab: 'bag', KeyI: 'bag', KeyC: 'craft', KeyB: 'build', KeyG: 'clan', KeyM: 'map', KeyH: 'help', KeyP: 'who' };
-  if (tabs[e.code]) { if (e.code === 'KeyB' && S.build) return stopBuild(); ui.open(tabs[e.code]); return; }
+  if (e.code === 'KeyB' && !ui.tab) { if (S.build) stopBuild(); else startBuild(); return; }
+  if (tabs[e.code]) { if (S.build) stopBuild(); ui.open(tabs[e.code]); return; }
   if (ui.tab) { if (e.code.startsWith('Digit')) { const n = +e.code.slice(5); if (n >= 1 && n <= 8) ui.numKey(n - 1); } return; }
+  if (e.code === 'KeyV' && !S.fly) toggleView();
+  if (S.build) {          // build mode has its own keys
+    if (e.code.startsWith('Digit')) pickCat(+e.code.slice(5) - 1);
+    if (e.code === 'KeyQ') cyclePiece(-1); if (e.code === 'KeyE') cyclePiece(1);
+    if (e.code === 'KeyR') { S.build.r = (S.build.r + 1) % 4; S.build.turned = true; }
+    if (e.code === 'KeyF') toggleFly();
+    if (e.code === 'KeyX' || e.code === 'Delete') removeAimed();
+    return;
+  }
   if (e.code.startsWith('Digit')) { const n = +e.code.slice(5); if (n >= 1 && n <= 8) select(n - 1); }
   if (e.code === 'KeyE') interact();
   if (e.code === 'KeyX') { S.sneak = !S.sneak; ui.toast(S.sneak ? 'Sneaking…' : 'Standing up'); }
-  if (e.code === 'KeyR' && S.build) { S.build.r = (S.build.r + 1) % 4; S.build.turned = true; }
-  if (e.code === 'KeyV' && S.build) toggleFly();
   if (e.code === 'KeyQ') ability();
   if (e.code === 'KeyF') recall();
-  if (e.code === 'KeyZ' && S.build) { S.build.lvl = (S.build.lvl + 1) % 3; buildBar(); }
   if (e.code === 'KeyK' && S.target?.k === 's' && heldDef()?.tool === 'hammer') emit('demolish', { id: S.target.s.id });
   if (e.code === 'KeyT') nextPiece();
 });
@@ -280,12 +289,13 @@ canvas.addEventListener('mousedown', e => {
   if (performance.now() - pad.lastT > 1500) S.pad = false;
   if (canLock && document.pointerLockElement !== canvas) { lock(); dragging = true; return; }
   dragging = true;
-  if (e.button === 0) { primary(); S.hold = true; } else if (e.button === 2 && S.build) stopBuild();
+  if (e.button === 0) { primary(); S.hold = true; } else if (e.button === 2 && S.build) removeAimed();
 });
 addEventListener('mouseup', () => { dragging = false; S.hold = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-addEventListener('mousemove', e => { if (document.pointerLockElement === canvas || dragging) { const k = cfg.sens / 100; cam.yaw -= e.movementX * .0026 * k; cam.pitch = Math.min(S.fly ? 1.5 : 1.35, Math.max(S.fly ? -1.2 : -.25, cam.pitch + e.movementY * .0022 * k * (cfg.invY ? -1 : 1))); } });
-addEventListener('wheel', e => { if (playing()) select(S.sel + (e.deltaY > 0 ? 1 : -1)); }, { passive: true });
+addEventListener('mousemove', e => { if (document.pointerLockElement === canvas || dragging) { const k = cfg.sens / 100; cam.yaw -= e.movementX * .0026 * k; const [lo, hi] = pitchLim(); cam.pitch = Math.min(hi, Math.max(lo, cam.pitch + e.movementY * .0022 * k * (cfg.invY ? -1 : 1))); } });
+function pitchLim() { return S.fly || S.view === 'first' ? [-1.45, 1.45] : [-.25, 1.35]; }
+addEventListener('wheel', e => { if (!playing() || !e.deltaY) return; if (S.build) cyclePiece(e.deltaY > 0 ? 1 : -1); else select(S.sel + (e.deltaY > 0 ? 1 : -1)); }, { passive: true });
 
 // ---------- actions ----------
 const fwd = () => [-Math.sin(cam.yaw), -Math.cos(cam.yaw)];
@@ -317,6 +327,7 @@ function primary() {
   swingAnim();
   if (t?.k === 'a') { emit('swing', { k: 'a', id: t.a.id }); sound('chop'); }
   else if (t?.k === 'n') { if (NODES[t.node.t].pick) { emit('pick', { id: t.node.id }); sound('pick'); } else { emit('swing', { k: 'n', id: t.node.id }); sound('chop'); } }
+  else if (t?.k === 's' && def?.tool === 'hammer') emit('demolish', { id: t.s.id });
   else if (t?.k === 's' && (STRUCTS[t.s.t].door || ['farm_plot', 'chest', 'bed', 'well', 'clan_banner'].includes(t.s.t) || STRUCTS[t.s.t].station) && def?.tool !== 'hammer') useStruct(t.s);
   else emit('swing', {});
 }
@@ -337,7 +348,7 @@ function recall() {
 }
 function aimPoint() {      // what is under the crosshair: an animal, the ground, or far away
   const d = new THREE.Vector3(), o = camera.position; camera.getWorldDirection(d);
-  for (let t = cam.dist * .7; t < 70; t += .5) {
+  for (let t = S.view === 'first' ? .4 : cam.dist * .7; t < 70; t += .5) {
     const x = o.x + d.x * t, y = o.y + d.y * t, z = o.z + d.z * t;
     for (const a of S.animals.values()) { const p = a.g.position; if (Math.hypot(p.x - x, p.y + .6 - y, p.z - z) < 1.3) return new THREE.Vector3(a.tx, a.ty + .6, a.tz); }
     if (y < heightAt(x, z)) return new THREE.Vector3(x, y, z);
@@ -347,67 +358,125 @@ function aimPoint() {      // what is under the crosshair: an animal, the ground
 function stations() { const out = {}; for (const s of S.structs.values()) { const st = STRUCTS[s.t].station; if (st && Math.hypot(s.x - me.x, s.z - me.z) < 7) out[st] = Math.max(out[st] || 0, s.d.tier || 1); } return out; }       // station -> best tier in reach
 
 // ---------- building ----------
-function startBuild(t) { stopBuild(); S.build = { t, r: 0, lvl: 0, ghost: G.ghostOf({ t, d: {} }) }; scene.add(S.build.ghost); buildBar(); lock(); }
+// Build mode (B) keeps a palette of pieces on screen. You aim with the dot in the middle of the screen: placing
+// snaps to what you look at, right-click removes the piece outlined in red, and F flies the camera without leaving.
+const BUILD_CATS = [['🧱', 'Walls', ['wood_foundation', 'wood_wall', 'wood_doorway', 'wood_window', 'wood_floor', 'wood_stairs']],
+  ['🏠', 'Roof', ['wood_roof_slope', 'wood_roof', 'wood_gable', 'stone_roof_slope', 'stone_roof', 'stone_gable']],
+  ['🪨', 'Stone', ['stone_foundation', 'stone_wall', 'stone_doorway', 'stone_window']],
+  ['🔥', 'Camp', ['campfire', 'workbench', 'chest', 'bed', 'torch_post', 'furnace', 'anvil', 'loom', 'well']],
+  ['🌱', 'Farm', ['farm_plot', 'fence']], ['🚩', 'Clan', ['clan_banner']]];
+for (const id in STRUCTS) if (!BUILD_CATS.some(c => c[2].includes(id))) BUILD_CATS[3][2].push(id);
+const catOf = t => Math.max(0, BUILD_CATS.findIndex(c => c[2].includes(t)));
+const lastPick = BUILD_CATS.map(c => c[2][0]);
+const hiBox = new THREE.BoxHelper(undefined, '#ff4d3a'); hiBox.visible = false; hiBox.material.depthTest = false; hiBox.renderOrder = 5; scene.add(hiBox);
+function startBuild(t) {
+  t ||= S.lastBuild || 'wood_foundation';
+  if (S.build) { if (S.build.t === t) return; scene.remove(S.build.ghost); Object.assign(S.build, { t, turned: false, v: undefined }); }
+  else S.build = { t, r: 0, hit: null };
+  S.lastBuild = t; lastPick[catOf(t)] = t;
+  S.build.ghost = G.ghostOf({ t, d: {} }); scene.add(S.build.ghost); buildBar(); lock();
+}
 function ghostShape(v) { const b = S.build; if (!b || b.v === v) return; b.v = v; const pos = b.ghost.position.clone(), rot = b.ghost.rotation.y; scene.remove(b.ghost); b.ghost = G.ghostOf({ t: b.t, d: {}, v }); b.ghost.position.copy(pos); b.ghost.rotation.y = rot; scene.add(b.ghost); }       // gables change shape to fit the roof
-function stopBuild() { if (!S.build) return; scene.remove(S.build.ghost); S.build = null; S.fly = null; $('buildbar').hidden = true; }
-// Free camera for building: the view leaves the character and flies around so you can see roofs and tight corners.
-function toggleFly() { S.fly = S.fly ? null : { x: camera.position.x, y: camera.position.y, z: camera.position.z }; buildBar(); if (S.fly) ui.toast(padUI() ? 'Free camera: left stick fly, A up, LT down, L3 faster. R3 returns to your character.' : 'Free camera: WASD fly, Space up, Shift down, Ctrl faster. V returns to your character.'); }
-function flyAim(py) {        // where the middle of the screen meets the level being built on
+function stopBuild() { if (!S.build) return; scene.remove(S.build.ghost); S.build = null; S.fly = null; hiBox.visible = false; $('buildbar').hidden = true; ui.hotbar(); $('hotbar').hidden = false; }
+function cyclePiece(dir) { const c = BUILD_CATS[catOf(S.build.t)][2], i = c.indexOf(S.build.t); startBuild(c[(i + dir + c.length) % c.length]); sound('pick'); }
+function pickCat(i) { if (!BUILD_CATS[i]) return; startBuild(lastPick[i]); sound('pick'); }
+function removeAimed() {
+  const s = S.build?.hit?.s; if (!s) return ui.toast('Point the dot at a piece to remove it');
+  emit('demolish', { id: s.id }); sound('chop');
+}
+// Free camera: the view leaves the character and flies around so you can see roofs and tight corners.
+function toggleFly() { if (!S.build) return; S.fly = S.fly ? null : { x: camera.position.x, y: camera.position.y, z: camera.position.z }; buildBar(); if (S.fly) ui.toast(padUI() ? 'Flying: left stick moves, A up, LT down, L3 faster. R3 lands.' : 'Flying: WASD moves, Space up, Shift down, Ctrl faster. F lands.'); }
+function toggleView() { S.view = S.view === 'first' ? 'third' : 'first'; try { localStorage.kwView = S.view; } catch {} const [lo, hi] = pitchLim(); cam.pitch = Math.min(hi, Math.max(lo, S.view === 'first' ? 0 : .35)); ui.toast(S.view === 'first' ? 'First-person view (V to switch back)' : 'Third-person view'); }
+function flyAim(py) {        // where the middle of the screen meets the level being built on (used when the dot points at the sky)
   const d = new THREE.Vector3(); camera.getWorldDirection(d); const o = camera.position;
   const t = d.y < -.05 ? Math.min(60, (py - o.y) / d.y) : 8; return [o.x + d.x * Math.max(1, t), o.z + d.z * Math.max(1, t)];
 }
+// What the dot in the middle of the screen is pointing at: a building piece or the ground.
+const ray = new THREE.Raycaster(), CENTER = new THREE.Vector2(0, 0);
+function buildAim() {
+  ray.setFromCamera(CENTER, camera); const o = ray.ray.origin, dir = ray.ray.direction;
+  const far = S.fly ? 70 : S.view === 'first' ? 11 : cam.dist + 10;
+  const near = S.fly || S.view === 'first' ? .2 : Math.max(.2, Math.hypot(o.x - me.x, o.y - me.y - 1.6, o.z - me.z) - .6);      // skip things between the camera and you
+  const objs = []; for (const s of S.structs.values()) if (Math.hypot(s.x - o.x, s.z - o.z) < far + 6) objs.push(s.g);
+  ray.near = near; ray.far = far; let best = null;
+  for (const h of ray.intersectObjects(objs, true)) { let g = h.object; while (g && g.userData.sid == null) g = g.parent; const s = g && S.structs.get(g.userData.sid); if (!s) continue; best = { p: h.point, t: h.distance, s }; break; }
+  for (let t = near, lim = best ? best.t : far; t < lim; t += .35) { const x = o.x + dir.x * t, y = o.y + dir.y * t, z = o.z + dir.z * t; if (y < heightAt(x, z)) { best = { p: new THREE.Vector3(x, heightAt(x, z), z), t, s: null }; break; } }
+  return best;
+}
 function buildBar() {
-  if (!S.build) return; const d = STRUCTS[S.build.t], p = padUI(), hint = ui.costHint(d);
-  $('buildbar').hidden = false;
-  $('buildbar').innerHTML = `${d.i} <b>${d.n}</b> &nbsp; <kbd>${p ? 'RT' : 'Click'}</kbd>place <kbd>${p ? 'X' : 'R'}</kbd>turn ${d.kind !== 'place' && d.kind !== 'foundation' ? `<kbd>${p ? 'Y' : 'Z'}</kbd>level ${(S.build.L ?? S.build.lvl) + 1} ` : ''}<kbd>${p ? 'R3' : 'V'}</kbd>${S.fly ? 'walk view' : 'free camera'} <kbd>${p ? 'B' : 'Esc'}</kbd>done<div class="need">Needs: ${ui.costHtml(d.cost)}</div>${hint ? `<div class="need hint">${hint}</div>` : ''}`;
+  if (!S.build) return; const b = S.build, d = STRUCTS[b.t], p = padUI(), hint = ui.costHint(d), lv = S.me.skills.building.l, ci = catOf(b.t);
+  $('buildbar').hidden = false; $('hotbar').hidden = true;
+  const K = (kb, pd) => `<kbd>${p ? pd : kb}</kbd>`;
+  const cats = BUILD_CATS.map(([ic, n], i) => `<span class="bcat ${i === ci ? 'on' : ''}">${p ? '' : `<small>${i + 1}</small>`}${ic} ${n}</span>`).join('');
+  const tiles = BUILD_CATS[ci][2].map(id => { const sd = STRUCTS[id], lock = lv < sd.lvl, ok = !lock && Object.entries(sd.cost).every(([k, n]) => ui.count(k) >= n); return `<span class="btile ${id === b.t ? 'on' : ''} ${lock ? 'lock' : ok ? '' : 'short'}" title="${sd.n}">${sd.i}${lock ? `<em>Lv ${sd.lvl}</em>` : ''}</span>`; }).join('');
+  const rm = b.hit?.s ? ` · ${K('Right-click', 'Y')} remove <b>${STRUCTS[b.hit.s.t].n.replace(/ \(.*\)/, '')}</b>` : '';
+  $('buildbar').innerHTML = `<div class="bcats">${p ? '<kbd>◀</kbd>' : ''}${cats}${p ? '<kbd>▶</kbd>' : ''}</div><div class="btiles">${p ? '<kbd>LB</kbd>' : ''}${tiles}${p ? '<kbd>RB</kbd>' : ''}</div>
+    <div class="bname">${d.n}${lv < d.lvl ? ` <span class="bad">— needs Building level ${d.lvl}</span>` : ''}</div><div class="need">${ui.costHtml(d.cost)}</div>${hint && lv >= d.lvl ? `<div class="need hint">${hint}</div>` : ''}
+    <div class="bkeys">${K('Click', 'RT')} place${rm} · ${p ? '<kbd>LB</kbd><kbd>RB</kbd>' : '<kbd>Wheel</kbd>'} piece · ${K('R', 'X')} turn · ${K('F', 'R3')} ${S.fly ? 'land' : 'fly'}${p ? '' : ` · <kbd>V</kbd> ${S.view === 'first' ? '3rd' : '1st'} person`} · ${K('B', 'B')} done</div>`;
 }
 // world direction for each rotation: 0 = +z, 1 = +x, 2 = -z, 3 = -x
 const DIRS = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+const SIDE = r => [DIRS[r][1], -DIRS[r][0]];       // a piece's own +x direction in the world
 const faceDir = () => { const [fx, fz] = fwd(); return Math.abs(fx) > Math.abs(fz) ? (fx > 0 ? 1 : 3) : (fz > 0 ? 0 : 2); };
+const GRID = new Set(['foundation', 'floor', 'slope', 'roof']);
 function placement() {
-  const b = S.build, d = STRUCTS[b.t], [fx, fz] = fwd(), reach = d.kind === 'place' || d.kind === 'stairs' ? 2.6 : d.kind === 'roof' || d.kind === 'slope' || d.kind === 'floor' ? 1.5 : 4.2 + cam.pitch * 2;      // roofs and ceilings go over the square you stand in (or are stepping into)
-  const aim = S.fly ? flyAim(me.y + 3 * b.lvl + (d.kind === 'roof' || d.kind === 'slope' || d.gable ? 3 : 0)) : null;         // in free camera you aim with the middle of the screen
-  const ax = aim ? aim[0] : me.x + fx * reach, az = aim ? aim[1] : me.z + fz * reach, cx = Math.round(ax / 4) * 4, cz = Math.round(az / 4) * 4;
-  let base = null, bd = 11; for (const s of S.structs.values()) if (STRUCTS[s.t].kind === 'foundation') { const q = Math.hypot(s.x - cx, s.z - cz); if (q < bd && Math.abs(s.y - me.y) < 7) { bd = q; base = s.y; } }
+  const b = S.build, d = STRUCTS[b.t], [fx, fz] = fwd(), hit = b.hit, over = d.kind === 'roof' || d.kind === 'slope' || d.kind === 'floor';
+  let ax, az, hy = me.y;
+  if (hit) {
+    ax = hit.p.x; az = hit.p.z; hy = hit.p.y; const hk = hit.s && STRUCTS[hit.s.t].kind;
+    if (hit.s && GRID.has(d.kind) && (hk === d.kind || (d.kind === 'roof' && hk === 'slope') || (d.kind === 'slope' && hk === 'roof'))) {
+      // aiming at a piece of the same sort adds the next one beside it, on the side nearest the dot
+      const ex = hit.p.x - hit.s.x, ez = hit.p.z - hit.s.z; if (Math.abs(ex) > Math.abs(ez)) { ax = hit.s.x + Math.sign(ex) * 4; az = hit.s.z; } else { ax = hit.s.x; az = hit.s.z + Math.sign(ez) * 4; }
+      if (d.kind !== 'foundation') hy = hit.s.y;
+    } else if (over && hk === 'wall') { const l = Math.hypot(fx, fz) || 1; ax += fx / l * 1.2; az += fz / l * 1.2; }        // looking at a wall top: the piece goes over the room behind it
+    else if (d.kind === 'foundation' && hk === 'foundation') { ax -= fx * .5; az -= fz * .5; }
+  } else if (S.fly) [ax, az] = flyAim(me.y + (over || d.gable ? 3 : 0));
+  else { const reach = d.kind === 'place' || d.kind === 'stairs' ? 2.6 : over ? 1.5 : 3.2; ax = me.x + fx * reach; az = me.z + fz * reach; }
+  const cx = Math.round(ax / 4) * 4, cz = Math.round(az / 4) * 4;
+  let base = null, bd = 11; for (const s of S.structs.values()) if (STRUCTS[s.t].kind === 'foundation') { const q = Math.hypot(s.x - cx, s.z - cz); if (q < bd && Math.abs(s.y - hy) < 12) { bd = q; base = s.y; } }
   base ??= Math.max(heightAt(cx - 2, cz - 2), heightAt(cx + 2, cz - 2), heightAt(cx - 2, cz + 2), heightAt(cx + 2, cz + 2), .2) + .35;
-  // Pieces stack on their own: placing where a piece already is goes one level up (walls up to 3 high), and a roof
-  // lands on top of the highest wall around its square. Z still raises the starting level by hand.
   const occ = (kind, x, y, z, r) => { for (const s of S.structs.values()) if (STRUCTS[s.t].kind === kind && Math.abs(s.x - x) < .3 && Math.abs(s.z - z) < .3 && Math.abs(s.y - y) < .5 && (kind !== 'wall' || s.r === r)) return true; return false; };
-  const wallTop = () => { let top = -1; for (const s of S.structs.values()) { const sd = STRUCTS[s.t]; if (sd.kind !== 'wall' || sd.gable || s.t === 'fence') continue; if (Math.abs(s.x - cx) + Math.abs(s.z - cz) > 2.3 || Math.abs(s.x - cx) > 2.3 || Math.abs(s.z - cz) > 2.3) continue; const L = Math.round((s.y - base) / 3); if (L >= 0 && L <= 2) top = Math.max(top, L); } return top; };
-  let L = b.lvl;
+  const wallTop = () => { let top = -1; for (const s of S.structs.values()) { const sd = STRUCTS[s.t]; if (sd.kind !== 'wall' || sd.gable || s.t === 'fence') continue; if (Math.abs(s.x - cx) > 2.3 || Math.abs(s.z - cz) > 2.3 || Math.abs(s.x - cx) + Math.abs(s.z - cz) > 2.3) continue; const L = Math.round((s.y - base) / 3); if (L >= 0 && L <= 2) top = Math.max(top, L); } return top; };
+  const lvAt = (max, off = .25) => Math.max(0, Math.min(max, Math.floor((hy - base + off) / 3)));
   switch (d.kind) {
     case 'foundation': return { x: cx, y: base, z: cz, r: 0 };
     case 'wall': {
-      // snap to whichever square edge is nearest the spot 3 m in front of the player
-      const wx = aim ? aim[0] : me.x + fx * 3, wz = aim ? aim[1] : me.z + fz * 3, ex = Math.round((wx - 2) / 4) * 4 + 2, ez = Math.round((wz - 2) / 4) * 4 + 2;
-      const side = Math.abs(wx - ex) < Math.abs(wz - ez), x = side ? ex : Math.round(wx / 4) * 4, z = side ? Math.round(wz / 4) * 4 : ez, r = side ? 1 : 0;
+      // snap to the square edge nearest the dot
+      const ex = Math.round((ax - 2) / 4) * 4 + 2, ez = Math.round((az - 2) / 4) * 4 + 2;
+      const side = Math.abs(ax - ex) < Math.abs(az - ez), x = side ? ex : Math.round(ax / 4) * 4, z = side ? Math.round(az / 4) * 4 : ez, r = side ? 1 : 0;
       if (b.t === 'fence' && bd > 10) return { x, y: heightAt(x, z), z, r };
       if (d.gable) {          // fit the roof beside this wall: under a slope it is a sloped triangle, under a ridge a peak
-        const side = r === 1 ? [[x - 2, z], [x + 2, z]] : [[x, z - 2], [x, z + 2]], lx = r === 1 ? [0, -1] : [1, 0];      // the wall's own +x direction in the world
-        for (const s of S.structs.values()) { const k = STRUCTS[s.t].kind; if (k !== 'slope' && k !== 'roof') continue; if (!side.some(([sx, sz]) => Math.abs(s.x - sx) < .3 && Math.abs(s.z - sz) < .3)) continue;
+        const sides = r === 1 ? [[x - 2, z], [x + 2, z]] : [[x, z - 2], [x, z + 2]], lx = r === 1 ? [0, -1] : [1, 0];
+        for (const s of S.structs.values()) { const k = STRUCTS[s.t].kind; if (k !== 'slope' && k !== 'roof') continue; if (!sides.some(([sx, sz]) => Math.abs(s.x - sx) < .3 && Math.abs(s.z - sz) < .3)) continue;
           let shape; if (k === 'slope') { const dv = DIRS[s.r]; if (dv[0] * lx[1] - dv[1] * lx[0] !== 0) continue; shape = dv[0] * lx[0] + dv[1] * lx[1] > 0 ? 0 : 1; } else if (s.r % 2 !== r % 2) shape = 2; else continue;
-          // reach down to the top of the wall under this edge, so a higher row of slopes leaves no gap
           let top = s.y; for (const w of S.structs.values()) { const wd = STRUCTS[w.t]; if (wd.kind === 'wall' && !wd.gable && w.t !== 'fence' && w.r === r && Math.abs(w.x - x) < .3 && Math.abs(w.z - z) < .3 && w.y + 3 <= s.y + .3) top = Math.min(top, Math.max(w.y + 3, s.y - 8)); }
           const band = Math.max(0, Math.min(4, Math.round((s.y - top) / 2)));
           return { x, y: s.y - 2 * band, z, r, v: shape + 3 * band };
         }
       }
-      const max = d.gable ? 3 : 2; while (L < max && occ('wall', x, base + 3 * L, z, r)) L++;
+      let L = lvAt(d.gable ? 3 : 2); const max = d.gable ? 3 : 2; while (L < max && occ('wall', x, base + 3 * L, z, r)) L++;
       return { x, y: base + 3 * L, z, r, L };
     }
-    case 'floor': while (L < 2 && occ('floor', cx, base + 3 * (L + 1), cz)) L++; return { x: cx, y: base + 3 * (L + 1), z: cz, r: 0, L };
-    case 'slope': {           // rises away from where you look (R to turn it); stacks onto the high edge of the slope below it
-      let r = b.turned ? b.r : faceDir(), y = base + 3 * (Math.max(L, wallTop()) + 1);
-      for (const s of S.structs.values()) if (STRUCTS[s.t].kind === 'slope' && (!b.turned || s.r === r)) { const dv = DIRS[s.r]; if (Math.abs(s.x + 4 * dv[0] - cx) < .3 && Math.abs(s.z + 4 * dv[1] - cz) < .3) { r = s.r; y = s.y + 2; break; } }
-      return { x: cx, y, z: cz, r, L: Math.round((y - base) / 3) - 1 };
+    case 'floor': { let L = Math.max(0, Math.min(2, Math.round((hy - base) / 3) - 1)); while (L < 2 && occ('floor', cx, base + 3 * (L + 1), cz)) L++; return { x: cx, y: base + 3 * (L + 1), z: cz, r: 0, L }; }
+    case 'slope': {           // rises away from where you look (R to turn it); continues the row beside it, or stacks onto the high edge of the slope below
+      const want = b.turned ? b.r : faceDir(), hs = hit?.s && STRUCTS[hit.s.t].kind === 'slope' ? hit.s : null;
+      // the slope you point at comes first, then slopes facing the way you look
+      const cands = [...S.structs.values()].filter(s => STRUCTS[s.t].kind === 'slope' && (!b.turned || s.r === want)).sort((p, q) => (p === hs ? -2 : p.r === want ? -1 : 0) - (q === hs ? -2 : q.r === want ? -1 : 0));
+      for (const s of cands) {
+        const sv = SIDE(s.r), dv = DIRS[s.r];
+        if (Math.abs(Math.abs((cx - s.x) * sv[0] + (cz - s.z) * sv[1]) - 4) < .3 && Math.abs((cx - s.x) * sv[1] - (cz - s.z) * sv[0]) < .3 && (s === hs || Math.abs(s.y - hy) < 1.6)) return { x: cx, y: s.y, z: cz, r: s.r };      // carries on the row beside it
+        if (Math.abs(s.x + 4 * dv[0] - cx) < .3 && Math.abs(s.z + 4 * dv[1] - cz) < .3) return { x: cx, y: s.y + 2, z: cz, r: s.r };      // stacks on its high edge
+      }
+      return { x: cx, y: base + 3 * (wallTop() + 1), z: cz, r: want };
     }
-    case 'roof': {            // a ridge sits on the high edges of the slopes beside it, along their line
-      let r = b.turned ? b.r % 2 : faceDir() % 2, y = base + 3 * (Math.max(L, wallTop()) + 1);
-      for (const s of S.structs.values()) if (STRUCTS[s.t].kind === 'slope') { const dv = DIRS[s.r]; if (Math.abs(s.x + 4 * dv[0] - cx) < .3 && Math.abs(s.z + 4 * dv[1] - cz) < .3) { r = s.r % 2; y = s.y + 2; break; } }
-      return { x: cx, y, z: cz, r, L: Math.round((y - base) / 3) - 1 };
+    case 'roof': {            // a ridge sits on the high edges of the slopes beside it, or carries on the ridge next to it
+      let r = b.turned ? b.r % 2 : faceDir() % 2, y = base + 3 * (wallTop() + 1), found = false;
+      for (const s of S.structs.values()) if (STRUCTS[s.t].kind === 'roof') { const sv = SIDE(s.r); if (Math.abs(Math.abs((cx - s.x) * sv[0] + (cz - s.z) * sv[1]) - 4) < .3 && Math.abs((cx - s.x) * sv[1] - (cz - s.z) * sv[0]) < .3) { r = s.r; y = s.y; found = true; break; } }
+      if (!found) for (const s of S.structs.values()) if (STRUCTS[s.t].kind === 'slope') { const dv = DIRS[s.r]; if (Math.abs(s.x + 4 * dv[0] - cx) < .3 && Math.abs(s.z + 4 * dv[1] - cz) < .3) { r = s.r % 2; y = s.y + 2; break; } }
+      return { x: cx, y, z: cz, r };
     }
     case 'stairs': {          // a flight placed just past the top of another one continues it: same direction, one level up (4 flights high)
-      let r = b.r;
+      let r = b.r, L = lvAt(3);
       for (const s of S.structs.values()) if (STRUCTS[s.t].kind === 'stairs') {
         const dx = Math.round(Math.sin(s.r * Math.PI / 2)), dz = Math.round(Math.cos(s.r * Math.PI / 2));
         if (Math.abs(s.x + 4 * dx - cx) < .3 && Math.abs(s.z + 4 * dz - cz) < .3 && (!b.turned || s.r === b.r)) { r = s.r; L = Math.max(L, Math.round((s.y - base) / 3) + 1); }
@@ -415,15 +484,39 @@ function placement() {
       L = Math.min(L, 3); while (L < 3 && occ('stairs', cx, base + 3 * L, cz)) L++;
       return { x: cx, y: base + 3 * L, z: cz, r, L };
     }
-    default: { const x = Math.round(ax * 2) / 2, z = Math.round(az * 2) / 2; return { x, y: groundAt(x, z, me.y + .5), z, r: b.r }; }
+    default: { const x = Math.round(ax * 2) / 2, z = Math.round(az * 2) / 2; return { x, y: groundAt(x, z, (hit ? hy : me.y) + .5), z, r: b.r }; }
   }
 }
 function placeBuild() { const { x, y, z, r, v } = placement(); emit('place', { t: S.build.t, x, y, z, r, v }, r => { if (r?.err) ui.toast(r.err, 'bad'); else if (r?.ok) sound('place'); }); }
+// Roof ends close themselves: a slope or ridge with no roof piece beside it gets a triangle on that side.
+function capsOf(s) {
+  const k = STRUCTS[s.t].kind; if (k !== 'slope' && k !== 'roof') return null;
+  const dv = DIRS[s.r], lx = SIDE(s.r), roofish = o => { const ok = STRUCTS[o.t].kind; return ok === 'slope' || ok === 'roof'; };
+  const at = (x, z, y, f) => { for (const o of S.structs.values()) if (o !== s && Math.abs(o.x - x) < .3 && Math.abs(o.z - z) < .3 && Math.abs(o.y - y) < .3 && f(o)) return true; return false; };
+  const chain = (rr, sg) => { let c = 0; while (c < 6 && at(s.x - sg * 4 * (c + 1) * dv[0], s.z - sg * 4 * (c + 1) * dv[1], s.y - 2 * (c + 1), o => STRUCTS[o.t].kind === 'slope' && o.r === rr)) c++; return c; };
+  const n = k === 'slope' ? chain(s.r, 1) : Math.max(chain(s.r, 1), chain((s.r + 2) % 4, -1));
+  const side = sg => {
+    if (at(s.x + sg * 4 * lx[0], s.z + sg * 4 * lx[1], s.y, roofish)) return -1;
+    const ex = s.x + sg * 2 * lx[0], ez = s.z + sg * 2 * lx[1];
+    for (const o of S.structs.values()) if (STRUCTS[o.t].gable && Math.abs(o.x - ex) < .3 && Math.abs(o.z - ez) < .3 && o.y > s.y - 2 * n - .5 && o.y < s.y + .5) return -1;      // an old gable already closes it
+    return n;
+  };
+  return [side(-1), side(1)];
+}
+function placeMesh(s) { s.g = G.makeStruct(s, s.cc); s.g.position.set(s.x, s.y, s.z); s.g.rotation.y = s.r * Math.PI / 2; s.g.userData.sid = s.id; scene.add(s.g); }
+function refreshCaps(x, z) {
+  for (const s of S.structs.values()) {
+    if (x != null && Math.hypot(s.x - x, s.z - z) > 30) continue;
+    const c = capsOf(s); if (!c) continue; const key = c.join(); if (s.capKey === key) continue;
+    s.cap = c; s.capKey = key; scene.remove(s.g); placeMesh(s); syncStruct(s);
+  }
+}
 
 // ---------- targeting ----------
 function nextPiece() { const l = S.hamList; if (!l || l.length < 2) return; const i = l.findIndex(o => o.s.id === (S.target?.s?.id)); S.hamSel = l[(i + 1) % l.length].s.id; sound('pick'); }
 function findTarget() {
   const [fx, fz] = fwd(), def = heldDef(), hammer = def?.tool === 'hammer'; let best = null, bs = 1e9;
+  if (hammer) { const a = buildAim(), s = a?.s; return s ? { k: 's', s, x: s.x, y: s.y, z: s.z, r: 1.2 } : null; }      // the hammer works on exactly the piece under the dot
   const consider = (x, z, reach, obj, bias = 0) => { const dx = x - me.x, dz = z - me.z, d = Math.hypot(dx, dz); if (d > reach) return; const dot = d < .01 ? 1 : (dx * fx + dz * fz) / d; if (dot < .1 && d > 1.4) return; const sc = d - dot * 1.6 + bias; if (sc < bs) { bs = sc; best = obj; } };
   for (const a of S.animals.values()) consider(a.g.position.x, a.g.position.z, (def?.reach || 2.6) + 1, { k: 'a', a, x: a.g.position.x, y: a.g.position.y, z: a.g.position.z, r: .7 }, def?.dmg > 2 ? -1.5 : 0);
   nodesNear(me.x, me.z, n => consider(n.x, n.z, 3.6, { k: 'n', node: n, x: n.x, y: n.y, z: n.z, r: (NODES[n.t].r || .5) * n.s + .25 }));
@@ -451,7 +544,7 @@ function promptFor(t) {
   if (t.k === 'a') return `<b style="color:${conColor(t.a.L, myLevel())}">${mobName(ANIMALS[t.a.t].n, t.a.L)} · Lv ${t.a.L}</b><span class="mobhp"><i style="width:${t.a.hp ?? 100}%"></i></span>${K('Click')} ${def?.tool === 'staff' ? 'zap (heals come first)' : 'attack'}`;
   if (t.k === 'n') { const nd = NODES[t.node.t]; if (nd.pick) return `${K('E')} ${nd.verb} ${nd.n}`; const ok = def?.tool === nd.tool; return `${nd.n} — ${K('Click')} ${nd.tool === 'axe' ? (ok ? 'chop' : 'punch for sticks (an axe gets wood)') : (ok ? 'mine' : 'needs a pickaxe')}`; }
   const s = t.s, d = STRUCTS[s.t], own = s.o === S.id ? '' : ` <small>(${s.on})</small>`;
-  if (def?.tool === 'hammer') { const l = S.hamList || []; return `${d.n}${own} — ${K('K')} take apart${l.length > 1 ? ` &nbsp; ${K('T')} next piece (${l.findIndex(o => o.s.id === s.id) + 1} of ${l.length})` : ''}`; }
+  if (def?.tool === 'hammer') return `${d.n}${own} — ${K('Click')} take apart`;
   if (d.station) return `${K('E')} Use ${d.n}`;
   if (d.door) return `${K('E')} ${s.d.open ? 'Close' : 'Open'} door`;
   if (s.t === 'chest') return `${K('E')} Open chest${own}`;
@@ -494,7 +587,7 @@ function drawMap(c) {
 
 // ---------- gamepad ----------
 // Standard (Xbox-style) layout. In the world it drives the character; with a panel open it moves a highlight around the menu.
-const KEYS_KB = $('keys').innerHTML, KEYS_PAD = '<span><b>Y</b> Bag</span> <span><b>X</b> Use</span> <span><b>RT</b> Action</span> <span><b>A</b> Jump</span> <span><b>B</b> Ability</span> <span><b>LB RB</b> Items</span> <span><b>↑</b> Craft</span> <span><b>→</b> Build</span> <span><b>←</b> Players</span> <span><b>↓</b> Map</span> <span><b>Start</b> Menu</span>';
+const KEYS_KB = $('keys').innerHTML, KEYS_PAD = '<span><b>Y</b> Bag</span> <span><b>X</b> Use</span> <span><b>RT</b> Action</span> <span><b>A</b> Jump</span> <span><b>B</b> Ability</span> <span><b>LB RB</b> Items</span> <span><b>↑</b> Craft</span> <span><b>→</b> Build</span> <span><b>R3</b> 1st person</span> <span><b>←</b> Players</span> <span><b>↓</b> Map</span> <span><b>Start</b> Menu</span>';
 let keysPad = false;
 const pad = { lastT: -1e9, mx: 0, mz: 0, run: false, jump: false, rt: false, prev: [], seen: false, navT: 0, navHeld: false, el: null, pt: null };
 const dead = v => Math.abs(v) < .2 ? 0 : (v - Math.sign(v) * .2) / .8;
@@ -535,17 +628,19 @@ function pollPad(dt) {
     pad.prev = b; return;
   }
   pad.mx = lx; pad.mz = -ly; pad.jump = b[0]; pad.rt = b[7]; pad.down = b[6];
-  const ls = cfg.padSens / 100; cam.yaw -= rx * 2.9 * ls * dt; cam.pitch = Math.min(S.fly ? 1.5 : 1.35, Math.max(S.fly ? -1.2 : -.25, cam.pitch + ry * 1.9 * ls * dt * (cfg.invY ? -1 : 1)));
+  const ls = cfg.padSens / 100; cam.yaw -= rx * 2.9 * ls * dt; const [plo, phi] = pitchLim(); cam.pitch = Math.min(phi, Math.max(plo, cam.pitch + ry * 1.9 * ls * dt * (cfg.invY ? -1 : 1)));
   if (hit(10)) pad.run = true; if (Math.hypot(lx, ly) < .3) pad.run = false;
   if (hit(7)) primary();
   if (hit(2)) { if (S.build) { S.build.r = (S.build.r + 1) % 4; S.build.turned = true; } else interact(); }
-  if (hit(3)) { if (S.build) { S.build.lvl = (S.build.lvl + 1) % 3; buildBar(); } else ui.open('bag'); }
-  if (hit(1)) { if (S.build) stopBuild(); else if (heldDef()?.tool === 'hammer') nextPiece(); else ability(); }
+  if (hit(3)) { if (S.build) removeAimed(); else ui.open('bag'); }
+  if (hit(1)) { if (S.build) stopBuild(); else ability(); }
   if (hit(6) && !S.fly) { S.sneak = !S.sneak; ui.toast(S.sneak ? 'Sneaking…' : 'Standing up'); }
-  if (hit(4)) select(S.sel - 1); if (hit(5)) select(S.sel + 1);
-  if (hit(11)) { if (S.build) toggleFly(); else if (S.target?.k === 's' && heldDef()?.tool === 'hammer') emit('demolish', { id: S.target.s.id }); }
+  if (hit(4)) { if (S.build) cyclePiece(-1); else select(S.sel - 1); } if (hit(5)) { if (S.build) cyclePiece(1); else select(S.sel + 1); }
+  if (hit(11)) { if (S.build) toggleFly(); else toggleView(); }
+  if (S.build && (hit(14) || hit(15))) { pickCat((catOf(S.build.t) + (hit(15) ? 1 : -1) + BUILD_CATS.length) % BUILD_CATS.length); pad.prev = b; return; }
   if (hit(8)) oskOpen($('chatin'), ui.sendChat);
-  const open = hit(12) ? 'craft' : hit(15) ? 'build' : hit(14) ? 'who' : hit(13) ? 'map' : hit(9) ? 'menu' : null;
+  if (hit(15)) { startBuild(); pad.prev = b; return; }
+  const open = hit(12) ? 'craft' : hit(14) ? 'who' : hit(13) ? 'map' : hit(9) ? 'menu' : null;
   if (open) { if (S.build) stopBuild(); pad.el = pad.pt = null; ui.open(open); }
   pad.prev = b;
 }
@@ -654,7 +749,8 @@ function updateMe(dt) {
     if ((k.Space || pad.jump) && me.grounded && !typing && !ui.tab && !S.fly) { me.vy = 8; me.grounded = false; me.y += .02; }
   }
   me.speed = Math.hypot(me.vx, me.vz); me.mode = swim ? 4 : S.sneak ? 3 : me.speed > 6.5 ? 2 : me.speed > .4 ? 1 : 0;
-  if (performance.now() - me.lastSwing < 500 || (heldDef()?.tool === 'bow' && ml === 0)) me.yaw = lerpAng(me.yaw, Math.atan2(fx, fz), Math.min(1, dt * 14));
+  if (S.view === 'first' && !S.fly) me.yaw = Math.atan2(fx, fz);
+  else if (performance.now() - me.lastSwing < 500 || (heldDef()?.tool === 'bow' && ml === 0)) me.yaw = lerpAng(me.yaw, Math.atan2(fx, fz), Math.min(1, dt * 14));
   else if (ml > .05) me.yaw = lerpAng(me.yaw, Math.atan2(mx, mz), Math.min(1, dt * 10));
   me.char.position.set(me.x, me.y, me.z); me.char.rotation.y = me.yaw;
   G.setHeld(me.char, held()?.id || null, heldDef()); G.animateCharacter(me.char, dt, me.speed, me.mode);
@@ -672,6 +768,10 @@ function updateFly(dt) {
 }
 function updateCamera(dt, focus) {
   if (S.fly && S.me) return updateFly(dt);
+  if (S.view === 'first' && S.me) {        // first person: the camera is your eyes
+    const cp = Math.cos(cam.pitch), ey = me.y + (S.sneak ? 1.2 : 1.62), dx = -Math.sin(cam.yaw), dz = -Math.cos(cam.yaw);
+    camera.position.set(me.x + dx * .12, ey, me.z + dz * .12); camera.lookAt(me.x + dx * cp, ey - Math.sin(cam.pitch), me.z + dz * cp); me.char.visible = false; return;
+  }
   const cp = Math.cos(cam.pitch), tx = focus.x, ty = focus.y + 1.7, tz = focus.z;
   let d = cam.dist; let x, y, z; const dx = Math.sin(cam.yaw) * cp, dz = Math.cos(cam.yaw) * cp, sy = Math.sin(cam.pitch);
   if (S.me) {
@@ -699,8 +799,14 @@ function frame() {
     for (const s of S.structs.values()) { const u = s.g.userData; if (u.flame) { const k = 1 + Math.sin(time * 11 + s.id) * .12 + Math.sin(time * 23 + s.id) * .08; u.flame.scale.set(k, 1 + Math.sin(time * 15 + s.id) * .2, k); } }
     // targeting + prompt
     S.target = S.build ? null : findTarget();
-    if (S.target) { const t = S.target; ring.visible = true; ring.position.set(t.x, Math.max(t.y, groundAt(t.x, t.z, me.y + 2)) + .12, t.z); ring.scale.setScalar(t.r * (1 + Math.sin(time * 5) * .05)); } else ring.visible = false;
-    if (S.build) { const p = placement(); if (STRUCTS[S.build.t].gable) ghostShape(p.v); const g = S.build.ghost; g.position.set(p.x, p.y, p.z); g.rotation.y = p.r * Math.PI / 2; if ((p.L ?? null) !== (S.build.L ?? null)) { S.build.L = p.L; buildBar(); } }
+    if (!S.build) { const hs = heldDef()?.tool === 'hammer' && S.target?.s; hiBox.visible = !!hs; if (hs) hiBox.setFromObject(hs.g); }
+    if (S.target && !(S.target.k === 's' && heldDef()?.tool === 'hammer')) { const t = S.target; ring.visible = true; ring.position.set(t.x, Math.max(t.y, groundAt(t.x, t.z, me.y + 2)) + .12, t.z); ring.scale.setScalar(t.r * (1 + Math.sin(time * 5) * .05)); } else ring.visible = false;
+    if (S.build) {
+      const b = S.build, prev = b.hit?.s; b.hit = buildAim(); const p = placement(); if (STRUCTS[b.t].gable) ghostShape(p.v);
+      const g = b.ghost; g.position.set(p.x, p.y, p.z); g.rotation.y = p.r * Math.PI / 2;
+      const d = STRUCTS[b.t], ok = S.me.skills.building.l >= d.lvl && Object.entries(d.cost).every(([k, n]) => ui.count(k) >= n); g.userData.gmat.color.set(ok ? '#7dff8a' : '#ff8a6a');
+      const hs = b.hit?.s; hiBox.visible = !!hs; if (hs) hiBox.setFromObject(hs.g); if (hs !== prev) buildBar();
+    }
     netT += dt; if (netT > .08) { netT = 0; const m = [+me.x.toFixed(2), +me.y.toFixed(2), +me.z.toFixed(2), +me.yaw.toFixed(2), me.mode]; const key = m.join(); if (key !== lastSent) { lastSent = key; sock.volatile.emit('mv', m); } }
     slowT += dt; if (slowT > .25) {
       slowT = 0; $('prompt').innerHTML = ui.tab ? '' : promptFor(S.target); $('bStam').style.width = S.stam + '%'; drawMini();
@@ -723,4 +829,4 @@ function frame() {
   renderer.render(scene, camera);
 }
 frame();
-window.KW = { me, cam, S, primary, interact, startBuild, placement, select, ui, cfg, music, emit, voice, osk, oskOpen, ability, recall, toggleFly };
+window.KW = { toggleView, buildAim, me, cam, S, primary, interact, startBuild, placement, select, ui, cfg, music, emit, voice, osk, oskOpen, ability, recall, toggleFly };

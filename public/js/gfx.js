@@ -140,6 +140,19 @@ function wallParts(t, stone) {
   else { out.push(P(box(1.25, 3, T), c, -1.375, 1.5, 0), P(box(1.25, 3, T), c, 1.375, 1.5, 0), P(box(1.5, .5, T), c, 0, 2.75, 0), P(box(1.7, .12, T + .1), c2, 0, 2.5, 0)); }
   post(-2); post(2); return out;
 }
+// End caps: where a roof piece is the last one in its row, its open side is closed with a triangle (and, for a row stacked
+// higher up, a band reaching down to the wall top). s.cap = [left, right]: -1 = no cap, otherwise the band in 2 m steps.
+function roofCaps(s, stone, add, ridge) {
+  if (!s.cap) return; const parts = [], col = stone ? STONE : PLANK;
+  for (const [i, sg] of [[0, -1], [1, 1]]) {
+    const n = s.cap[i]; if (n == null || n < 0) continue; const b = -2 * n;
+    const pts = ridge ? (n ? [[-2, b], [2, b], [2, 0], [0, 1], [-2, 0]] : [[-2, 0], [2, 0], [0, 1]]) : (n ? [[-2, b], [2, b], [2, 2], [-2, 0]] : [[-2, 0], [2, 0], [2, 2]]);
+    const sh = new THREE.Shape(); sh.moveTo(...pts[0]); for (const q of pts.slice(1)) sh.lineTo(...q); sh.closePath();
+    const g = new THREE.ExtrudeGeometry(sh, { depth: .24, bevelEnabled: false }); g.translate(0, 0, -.12); g.rotateY(-Math.PI / 2); g.translate(sg * 2, 0, 0);
+    parts.push(P(g, col));
+  }
+  if (parts.length) add(parts);
+}
 export function makeStruct(s, clanColor) {
   const t = s.t, g = new THREE.Group(), u = g.userData = {}, stone = t.startsWith('stone');
   const add = (parts, sh = true) => { const m = M(parts, sh); g.add(m); return m; };
@@ -161,8 +174,8 @@ export function makeStruct(s, clanColor) {
       if (STRUCTS[t].door) { const d = new THREE.Group(); d.position.set(-.75, 0, 0); d.add(M([P(box(1.5, 2.45, .1), stone ? WOOD : DARK, .75, 1.23, 0), P(box(.08, .08, .2), '#d9b23a', 1.3, 1.2, 0)])); g.add(d); u.door = d; }
       break;
     case 'floor': add([P(box(4, .2, 4), stone ? STONE2 : PLANK, 0, -.1, 0), P(box(4, .12, .2), DARK, 0, -.24, -1.9), P(box(4, .12, .2), DARK, 0, -.24, 1.9)]); break;
-    case 'roof': { const c = stone ? '#59636e' : THATCH, a = Math.atan2(1, 2); add([P(box(4.3, .18, 2.36), c, 0, .55, -1.02, -a), P(box(4.3, .18, 2.36), c, 0, .55, 1.02, a), P(box(4.4, .2, .34), stone ? '#434b54' : '#b89a45', 0, 1.06, 0)]); break; }      // ridge: peaks 1 m up in the middle, same pitch as the slopes
-    case 'slope': { const c = stone ? '#59636e' : THATCH, e = stone ? '#434b54' : '#b89a45', a = Math.atan2(2, 4); add([P(box(4.3, .18, 4.62), c, 0, 1.05, 0, -a), P(box(4.3, .12, .22), e, 0, .08, -2.14, -a), P(box(.12, .1, 4.5), e, -2.12, 1.1, 0, -a), P(box(.12, .1, 4.5), e, 2.12, 1.1, 0, -a)]); break; }      // rises 2 m across the square toward local +z
+    case 'roof': { const c = stone ? '#59636e' : THATCH, a = Math.atan2(1, 2); roofCaps(s, stone, add, true); add([P(box(4.3, .18, 2.36), c, 0, .55, -1.02, -a), P(box(4.3, .18, 2.36), c, 0, .55, 1.02, a), P(box(4.4, .2, .34), stone ? '#434b54' : '#b89a45', 0, 1.06, 0)]); break; }      // ridge: peaks 1 m up in the middle, same pitch as the slopes
+    case 'slope': { const c = stone ? '#59636e' : THATCH, e = stone ? '#434b54' : '#b89a45', a = Math.atan2(2, 4); roofCaps(s, stone, add, false); add([P(box(4.3, .18, 4.62), c, 0, 1.05, 0, -a), P(box(4.3, .12, .22), e, 0, .08, -2.14, -a), P(box(.12, .1, 4.5), e, -2.12, 1.1, 0, -a), P(box(.12, .1, 4.5), e, 2.12, 1.1, 0, -a)]); break; }      // rises 2 m across the square toward local +z
     case 'stairs': add([0, 1, 2, 3, 4, 5].map(i => P(box(3.6, .5, 4 / 6 + .02), i % 2 ? PLANK : WOOD, 0, .25 + i * .5, -2 + (i + .5) * (4 / 6)))); break;
     case 'campfire': add([...[0, 1, 2, 3, 4, 5, 6, 7].map(i => P(dod(.16), i % 2 ? STONE : STONE2, Math.cos(i * .785) * .55, .1, Math.sin(i * .785) * .55)), P(cyl(.08, .08, .9, 5), DARK, 0, .16, 0, 0, 0, 1.3), P(cyl(.08, .08, .9, 5), '#3a2a1e', 0, .16, 0, 1.3, .9, 0), P(cyl(.08, .08, .9, 5), DARK, 0, .2, 0, 1.3, -.9, 0)]); fire(.55, 1, 30); break;
     case 'torch_post': add([P(cyl(.05, .07, 1.7, 5), DARK, 0, .85, 0)]); fire(1.85, .45, 22); break;

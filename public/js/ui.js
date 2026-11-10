@@ -160,7 +160,7 @@ export function createUI(S, act) {
     return r ? `Make ${ITEMS[k].n} ${r.station ? `at a ${STATION_NAMES[r.station]}` : 'by hand'} (C) from ${Object.keys(r.in).map(i => ITEMS[i].n).join(' + ')}` : `Gather more ${ITEMS[k].n}`;
   }
   function build() {
-    const lv = S.me.skills.building.l; let h = `<p style="margin-top:0;color:var(--dim)">Pick something, aim where you want it, then place it. Each card lists what it costs and how much you have (green = enough, red = short). You need a Building Hammer in your bag (Building Lv ${lv}).<br>Walls stack by themselves up to 3 high: place a wall where one already stands and it goes on top. Roofs land on the highest wall around them, and a Gable closes the open triangle at each end of a roof.</p>`;
+    const lv = S.me.skills.building.l; let h = `<p style="margin-top:0;color:var(--dim)">Pick something, aim where you want it, then place it. Each card lists what it costs and how much you have (green = enough, red = short). You need a Building Hammer in your bag (Building Lv ${lv}).<br>Tip: you don't need this page — press <b>B</b> in the world and pick pieces from the bar at the bottom. Right-click removes a piece, F flies the camera.</p>`;
     for (const cat of ['Camp', 'Farm', 'Building', 'Clan']) {
       h += `<h3>${cat}</h3><div class="cards">`;
       for (const [id, d] of Object.entries(STRUCTS)) if (d.cat === cat) {
@@ -201,14 +201,14 @@ export function createUI(S, act) {
     <p><kbd>K</kbd> with the hammer in hand: take apart the highlighted piece (half the materials back). Roofs, stairs and floors are offered before the foundation under them; <kbd>T</kbd> steps to the next piece in reach</p>
     <p><b>🎮 Controller:</b> <kbd>Left stick</kbd> move · <kbd>Right stick</kbd> look · <kbd>A</kbd> jump · <kbd>X</kbd> pick up / use · <kbd>RT</kbd> use held item (hold to keep going) · <kbd>LB</kbd> <kbd>RB</kbd> action bar · <kbd>L3</kbd> run · <kbd>LT</kbd> sneak · <kbd>Y</kbd> bag · <kbd>D-pad</kbd> ↑ craft, → build, ← clan, ↓ map · <kbd>Start</kbd> menu · <kbd>R3</kbd> take apart (hammer)</p>
     <p><b>🎮 In menus:</b> <kbd>D-pad</kbd>/<kbd>stick</kbd> move the highlight · <kbd>A</kbd> choose (pick an item, then A on another slot moves it) · <kbd>X</kbd> eat / wear / quick-move · <kbd>LB</kbd> <kbd>RB</kbd> switch tab · <kbd>B</kbd> close. Building: <kbd>RT</kbd> place · <kbd>X</kbd> turn · <kbd>Y</kbd> floor · <kbd>B</kbd> done. An on-screen keyboard opens when you press <kbd>A</kbd> on a text box; <kbd>Back/View</kbd> opens chat.</p>
-    <p><kbd>Q</kbd> class ability · <kbd>F</kbd> Return Home (30 min cooldown) · <kbd>P</kbd> players, party, trade and voice · <kbd>V</kbd> free camera while building</p>
+    <p><kbd>Q</kbd> class ability · <kbd>F</kbd> Return Home (30 min cooldown) · <kbd>P</kbd> players, party, trade and voice · <kbd>V</kbd> first-person / third-person view</p>
     <p><b>Classes</b> follow the weapon in your hand. <b>Sword</b>: Guardian, a tank — Taunt pulls monsters onto you. <b>Spear</b>: Striker, melee damage. <b>Bow</b>: Ranger, ranged damage. <b>Staff</b>: Mender — left click heals the most hurt player nearby. Plate armor suits tanks, leather suits damage, cloth suits healers; three pieces of one kind give a set bonus.</p>
     <p><b>Monster rings</b> show how tough a monster is next to you: grey = far weaker, green = 2 levels below, blue = 1 below, white = your level, yellow = 1 above, red = dangerous. Monsters get tougher, and drop better loot, the farther you go from the starting meadow.</p>
     <p><b>Getting started:</b> punch trees for sticks, grab loose stones and tall grass, then craft a Stone Axe. Follow the “Next step” box — it walks you through everything.</p>
     <p><b>Skills</b> grow by doing the thing. Higher levels give bonus loot, unlock recipes and building pieces.</p>
     <p><b>Food & water:</b> cook meat on a campfire, drink at lakes with E, and build a Well near home.</p>
     <p><b>Farming:</b> craft a Hoe → place a Farm Plot → hold seeds and click the plot. A full waterskin makes it grow faster.</p>
-    <p><b>Building:</b> foundations first, then walls, a door and a roof. Walls stack up to 3 high (place again on the same spot), roofs sit on the highest wall, and a Gable fills the triangle at each roof end. Stairs + upper floors make more storeys.</p>
+    <p><b>Building:</b> press <kbd>B</kbd> to start building and again to stop. The bar at the bottom shows the pieces: <kbd>1</kbd>–<kbd>6</kbd> picks a type, the mouse wheel (or <kbd>Q</kbd>/<kbd>E</kbd>) picks a piece. Aim with the dot in the middle of the screen: <kbd>Click</kbd> places, <kbd>Right-click</kbd> removes the piece outlined in red (you get half back), <kbd>R</kbd> turns, <kbd>F</kbd> flies the camera around your house. Aim at the edge of a foundation, floor or roof piece to add the next one beside it; aim at a wall to stack one on top. Roof ends close themselves.</p>
     <p><b>Night:</b> wolves roam the deep woods after dark but never come near a campfire or torch post. Sleep spots: a Bed sets where you wake up.</p>
     <p><b>Clans:</b> press G. Clan-mates share everything you build.</p>
     <p><b>If you get knocked out</b> you wake up at your bed with all your stuff.</p></div>
@@ -297,7 +297,7 @@ export function createUI(S, act) {
   $('panel').addEventListener('keydown', e => { if (e.target.tagName === 'INPUT') e.stopPropagation(); });
 
   return {
-    open, close, render, toast, feed, chat, hotbar, vitals, quest, numKey, costHtml, costHint, sendChat,
+    open, close, render, toast, feed, chat, hotbar, vitals, quest, numKey, costHtml, costHint, sendChat, count,
     get tab() { return tab; },
     refresh() { if (drag) return; hotbar(); quest(); const a = document.activeElement; if (tab && tab !== 'map' && !(a && a.tagName === 'INPUT' && $('panel').contains(a))) render(); },
   };

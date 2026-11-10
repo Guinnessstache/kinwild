@@ -60,6 +60,15 @@ Each player picks a name and a PIN. Same name + PIN brings the character back on
 
 The "Next step" box walks new players through 19 steps from punching a tree to forging iron.
 
+## Build 8 changes
+
+- **Much bigger land**: about 1.5 km² of land, roughly 7 times the old island. The original island is unchanged in the middle.
+- **Zones instead of rings**: 22 named zones with their own ground colour and plants (meadow, forest, marsh, autumn, highland, frost, dark). Monsters run from level 1 to 30; each zone covers three levels, and the outer zones are the toughest. The map shows zone borders, names and levels; the levels are coloured against your own.
+- **Harder fights**: monsters above your level hit much harder and take less damage from you. A red monster (2+ levels above) beats a lone player; a yellow one is a fair fight. Weapons have attack speeds (sword 0.9s, spear 1.1s, bow 0.9s, staff 1.3s). Monsters above level 10 are "Dire", above 20 "Ancient", and grow a little with level.
+- **Monster health bars** now go down as you hit them.
+- **Craft tab** shows only the hand-made basics; everything else is made at its station (press E on it).
+- **Microphone choice** in the menu (Esc).
+
 ## Build 7 changes
 
 - The craft tab shows hand-made basics anywhere; each station's recipes show only when you are at that station (press E on it).

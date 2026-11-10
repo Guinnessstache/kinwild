@@ -1,6 +1,6 @@
 // Classes, gear, containers, parties, trading, voice signalling and other systems, mixed into Game.
-import { ITEMS, STRUCTS, ANIMALS, SCROLLS, UPGRADE, ABIL_CD, WSKILL, calcStats, combatLevel, zoneLevel, gearSt } from '../shared/data.js';
-import { heightAt, SPAWN } from '../shared/terrain.js';
+import { ITEMS, STRUCTS, ANIMALS, SCROLLS, UPGRADE, ABIL_CD, WSKILL, calcStats, combatLevel, gearSt } from '../shared/data.js';
+import { heightAt, zoneAt, SPAWN } from '../shared/terrain.js';
 
 const STACK = 99, HOUR = 3600000;
 const r2 = v => Math.round(v * 100) / 100;
@@ -170,7 +170,7 @@ const methods = {
     }
   },
   onWho(p) {
-    return { list: [...this.players.values()].map(o => ({ id: o.id, name: o.name, lv: this.plvl(o), w: ITEMS[this.held(o)?.id]?.tool || '', tag: this.clans[o.clan]?.tag || '', zl: zoneLevel(distSpawn(o.x, o.z)),
+    return { list: [...this.players.values()].map(o => ({ id: o.id, name: o.name, lv: this.plvl(o), w: ITEMS[this.held(o)?.id]?.tool || '', tag: this.clans[o.clan]?.tag || '', zn: zoneAt(o.x, o.z).name,
       party: o.party ? (o.party === p.party ? 2 : 1) : 0, voice: !!o.voice, near: this.near(p, o, 10) })) };
   },
 

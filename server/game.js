@@ -1,8 +1,9 @@
 // Authoritative game simulation: everything that matters (items, skills, world state) is decided here.
 import crypto from 'crypto';
-import { ITEMS, RECIPES, STRUCTS, NODES, ANIMALS, CROPS, SKILLS, QUESTS, STATION_NAMES, xpNeed, DAY_LEN, MAX_LVL, zoneLevel } from '../shared/data.js';
+import { ITEMS, RECIPES, STRUCTS, NODES, ANIMALS, CROPS, SKILLS, QUESTS, STATION_NAMES, xpNeed, DAY_LEN, MAX_LVL, lvlMods, atkSpd } from '../shared/data.js';
 import { install, stk, distSpawn } from './rpg.js';
-import { heightAt, biomeAt, genNodes, SPAWN } from '../shared/terrain.js';
+import { heightAt, biomeAt, genNodes, zoneAt, SPAWN, HALF } from '../shared/terrain.js';
+const EDGE = HALF - 40;      // how far out anything may go
 
 const INV = 32, STACK = 99;
 const PEACEFUL = process.env.PEACEFUL === '1';
@@ -31,6 +32,7 @@ export class Game {
     }
     this.clans = (await this.db.load('clans')) || {};
     this.perms = (await this.db.load('perms')) || {};
+    for (const st of this.structs.values()) this.clearNodes(st);       // nothing grows through floors (also after a map change)
     for (const t in ANIMALS) for (let i = 0; i < ANIMALS[t].count; i++) this.spawnAnimal(t, true);
     setInterval(() => this.tick(), 100);
     setInterval(() => this.slow(), 1000);
@@ -170,7 +172,7 @@ export class Game {
   // ---------- movement & vitals ----------
   onMove(p, d) {
     if (!Array.isArray(d) || d.some(v => typeof v !== 'number' || !isFinite(v))) return;
-    p.x = Math.max(-318, Math.min(318, d[0])); p.y = d[1]; p.z = Math.max(-318, Math.min(318, d[2])); p.r = r2(d[3]); p.a = d[4] | 0;
+    p.x = Math.max(-EDGE, Math.min(EDGE, d[0])); p.y = d[1]; p.z = Math.max(-EDGE, Math.min(EDGE, d[2])); p.r = r2(d[3]); p.a = d[4] | 0;
   }
   hurt(p, dmg, why) {
     const st = this.stats(p), took = dmg * (1 - st.arm / 100) * (Date.now() < (p.guard || 0) ? .5 : 1);
@@ -229,6 +231,7 @@ export class Game {
       this.fx('hit', node.x, node.y + 1, node.z, { c: nd.tool === 'axe' ? '#b98450' : '#9aa0a6' });
       if (hp <= 0) this.killNode(d.id, nd); else this.nodeHp.set(d.id, hp);
     } else if (d.k === 'a') {
+      if (now - (p.lastAtk || 0) < atkSpd(def?.tool) * 1000 - 120) return; p.lastAtk = now;       // each weapon has its own attack speed
       const a = this.animals.get(d.id); if (!a || !this.near(p, a, (def?.reach || 2.6) + 2)) return;
       const [dmg, sk] = this.dmgOf(p); this.hitAnimal(a, dmg, p, sk); this.wear(p);
     }
@@ -260,11 +263,11 @@ export class Game {
   spawnAnimal(t, anywhere) {
     const d = ANIMALS[t];
     for (let i = 0; i < 30; i++) {
-      const x = Math.random() * 560 - 280, z = Math.random() * 560 - 280;
-      if (!d.biomes.includes(biomeAt(x, z))) continue;
-      const L = zoneLevel(distSpawn(x, z)); if (L < (d.minL || 1) || distSpawn(x, z) < 12) continue;      // level comes from how far out it lives
+      const x = (Math.random() * 2 - 1) * (EDGE - 20), z = (Math.random() * 2 - 1) * (EDGE - 20);
+      const zone = zoneAt(x, z); if (!d.biomes.includes(biomeAt(x, z, zone))) continue;
+      const L = zone.lo + Math.floor(Math.random() * (zone.hi - zone.lo + 1)); if (L < (d.minL || 1) || distSpawn(x, z) < 12) continue;      // level comes from the zone it lives in
       if (!anywhere) { let close = false; for (const p of this.players.values()) if (Math.hypot(p.x - x, p.z - z) < 45) close = true; if (close) continue; }
-      const max = Math.round(d.hp * (1 + .35 * (L - 1)));
+      const max = Math.round(d.hp * (1 + .6 * (L - 1)));
       const a = { id: this.nextId++, t, x, z, y: heightAt(x, z), L, hp: max, max, ang: Math.random() * 6.28, spd: 0, tw: Math.random() * 4, target: null, until: 0, atk: 0 };
       this.animals.set(a.id, a); this.dirty = true;
       if (!anywhere) this.io.to('game').emit('a+', this.apub(a));
@@ -274,12 +277,12 @@ export class Game {
   isNight() { return this.time < 0.22 || this.time > 0.79; }
   nearFire(p) { for (const s of this.structs.values()) if ((s.t === 'campfire' || s.t === 'torch_post') && Math.hypot(s.x - p.x, s.z - p.z) < 12) return true; return false; }
   hitAnimal(a, dmg, p, sk = 'melee') {
-    const d = ANIMALS[a.t], now = Date.now(); a.hp -= dmg;
+    const d = ANIMALS[a.t], now = Date.now(); dmg *= lvlMods(a.L - this.plvl(p)).youHit; a.hp -= dmg;
     this.fx('hit', a.x, a.y + .6, a.z, { c: '#c0392b' });
     if (!(a.taunt > now)) { a.target = p.id; a.until = now + 14000; }
     const grey = a.L < this.plvl(p) - 2 ? .1 : 1;          // far weaker monsters teach almost nothing
     this.xp(p, sk, (1 + a.L * .5) * grey);
-    if (a.hp > 0) { this.io.to('game').volatile.emit('ah', [a.id, Math.round(100 * a.hp / a.max)]); return; }
+    if (a.hp > 0) { this.io.to('game').emit('ah', [a.id, Math.round(100 * a.hp / a.max)]); return; }      // not volatile: it is sent in the same instant as the hit sparks, and a second volatile message gets dropped
     this.animals.delete(a.id); this.io.to('game').emit('a-', a.id);
     const lv = this.lvl(p, 'hunting'), more = Math.floor((a.L - 1) / 3);
     for (const [id, lo, hi, ch] of d.drops) if (Math.random() < ch) this.give(p, id, ri(lo, hi) + more + (Math.random() < lv * 0.03 ? 1 : 0));
@@ -292,7 +295,7 @@ export class Game {
   }
   onShoot(p, d) {
     const it = this.held(p); if (ITEMS[it?.id]?.tool !== 'bow') return;
-    const now = Date.now(); if (now - p.lastSwing < 600) return; p.lastSwing = now;
+    const now = Date.now(); if (now - p.lastSwing < atkSpd('bow') * 1000 - 120) return; p.lastSwing = now;
     let mul = 1; if (d.ab && now >= (p.cd.bow || 0)) { mul = 2.5; p.cd.bow = now + 8000; }          // Aimed Shot
     if (this.count(p, 'arrow') < 1) return this.toast(p, 'No arrows! Craft some at a workbench.', 'bad');
     const len = Math.hypot(d.dx, d.dy, d.dz); if (!(len > 0.5 && len < 1.5)) return;
@@ -326,13 +329,13 @@ export class Game {
         const q = Math.hypot(tgt.x - a.x, tgt.z - a.z);
         if (q > 45 || (d.mode === 'hunt' && this.nearFire(tgt) && !a.target)) { a.target = null; a.spd = 0; }
         else { a.ang = Math.atan2(tgt.x - a.x, tgt.z - a.z); a.spd = q > 1.5 ? d.run : 0;
-          if (q < 2 && now > a.atk) { a.atk = now + 1400; this.hurt(tgt, d.dmg * (1 + .22 * (a.L - 1)), `A ${d.n.toLowerCase()} got you.`); this.flush(tgt); } }
+          if (q < 2 && now > a.atk) { a.atk = now + 1400; this.hurt(tgt, d.dmg * (1 + .3 * (a.L - 1)) * lvlMods(a.L - this.plvl(tgt)).itHits, `A level ${a.L} ${d.n.toLowerCase()} got you.`); this.flush(tgt); } }
       } else {
         a.tw -= dt; if (a.tw <= 0) { a.tw = 2 + Math.random() * 5; if (Math.random() < 0.5) a.spd = 0; else { a.spd = d.walk; a.ang = Math.random() * 6.28; } }
       }
       if (a.spd > 0) {
         const nx = a.x + Math.sin(a.ang) * a.spd * dt, nz = a.z + Math.cos(a.ang) * a.spd * dt;
-        if (heightAt(nx, nz) < 0.4 || Math.abs(nx) > 300 || Math.abs(nz) > 300) { a.ang += 2 + Math.random(); if (mode === 'wander') a.tw = 1.5; }
+        if (heightAt(nx, nz) < 0.4 || Math.abs(nx) > EDGE || Math.abs(nz) > EDGE) { a.ang += 2 + Math.random(); if (mode === 'wander') a.tw = 1.5; }
         else { a.x = nx; a.z = nz; a.y = heightAt(nx, nz); }
       }
     }
@@ -346,11 +349,10 @@ export class Game {
       else if (now > p.fishing.at) { p.fishing = null; this.give(p, 'raw_fish', 1 + (Math.random() < this.lvl(p, 'fishing') * 0.03 ? 1 : 0)); this.xp(p, 'fishing', 14); this.wear(p); p.socket.emit('fished', { ok: 1 }); this.flush(p); }
     }
     if (!this.players.size) return;
-    this.io.to('game').volatile.emit('s', {
-      t: this.time,
-      p: [...this.players.values()].map(p => [p.id, r2(p.x), r2(p.y), r2(p.z), p.r, p.a, this.held(p)?.id || 0]),
-      a: [...this.animals.values()].map(a => [a.id, r2(a.x), r2(a.y), r2(a.z), r2(a.ang), a.spd > 3 ? 2 : a.spd > 0 ? 1 : 0]),
-    });
+    // each player only hears about animals within 220 m: the land is big and far ones are hidden in the fog anyway
+    const P = [...this.players.values()].map(p => [p.id, r2(p.x), r2(p.y), r2(p.z), p.r, p.a, this.held(p)?.id || 0]);
+    const A = [...this.animals.values()].map(a => [a.id, r2(a.x), r2(a.y), r2(a.z), r2(a.ang), a.spd > 3 ? 2 : a.spd > 0 ? 1 : 0]);
+    for (const p of this.players.values()) p.socket.volatile.emit('s', { t: this.time, p: P, a: A.filter(a => Math.abs(a[1] - p.x) < 220 && Math.abs(a[3] - p.z) < 220) });
   }
 
   // ---------- items ----------
@@ -432,7 +434,7 @@ export class Game {
     const def = STRUCTS[d.t]; if (!def) return;
     if ([d.x, d.y, d.z].some(v => typeof v !== 'number' || !isFinite(v))) return;
     const x = r2(d.x), y = r2(d.y), z = r2(d.z), r = (d.r | 0) & 3;
-    if (Math.hypot(x - p.x, z - p.z) > 45 || Math.abs(y - heightAt(x, z)) > 16 || Math.abs(x) > 300 || Math.abs(z) > 300) return { err: 'Too far away' };
+    if (Math.hypot(x - p.x, z - p.z) > 45 || Math.abs(y - heightAt(x, z)) > 16 || Math.abs(x) > EDGE || Math.abs(z) > EDGE) return { err: 'Too far away' };
     if (heightAt(x, z) < 0.2 && def.kind !== 'foundation') { /* building over water needs a foundation under it */ if (y < 0.5) return { err: 'Too wet here — put a foundation down first' }; }
     if (this.lvl(p, 'building') < def.lvl) return { err: `Needs Building level ${def.lvl}` };
     if (def.needs ? !this.count(p, def.needs) : (!def.free && !this.count(p, 'hammer'))) return { err: def.needs ? 'You need a Hoe for that' : 'You need a Building Hammer (craft one with C)' };

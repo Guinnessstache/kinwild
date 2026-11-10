@@ -1,5 +1,5 @@
 // HUD and panels (bag, crafting, building, clan, map, help). Pure DOM, driven by the shared state S.
-import { ITEMS, RECIPES, STRUCTS, SKILLS, QUESTS, STATION_NAMES, QUAL, STAT_N, CLASSES, ABIL_CD, SET_BONUS, UPGRADE, xpNeed, MAX_LVL, calcStats, combatLevel, gearSt, zoneName, zoneLevel } from '/shared/data.js';
+import { ITEMS, RECIPES, STRUCTS, SKILLS, QUESTS, STATION_NAMES, QUAL, STAT_N, CLASSES, ABIL_CD, SET_BONUS, UPGRADE, xpNeed, MAX_LVL, calcStats, combatLevel, gearSt, } from '/shared/data.js';
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -112,7 +112,7 @@ export function createUI(S, act) {
       <div class="grid">${box.inv.map((it, i) => slot(it, 1, i)).join('')}</div>` : '';
     // At a station you see that station's recipes; anywhere else only the hand-made basics plus any station you are standing at.
     const at = box ? STRUCTS[box.t].station : null, all = Object.keys(STATION_NAMES);
-    const show = at ? [at, null] : [null, ...all.filter(st => near[st])], away = at ? [] : all.filter(st => !near[st]);
+    const show = at ? [at, null] : [null], away = at ? [] : all;       // station recipes only appear when you use that station
     h += `<p style="margin:0 0 8px;color:var(--dim)">Ingredients come from your bag first, then from your chests and stations within a few steps.</p>`;
     for (const st of show) {
       const tier = st ? near[st] || 0 : 9;
@@ -123,7 +123,7 @@ export function createUI(S, act) {
         h += `<div class="rec ${ok ? '' : 'off'}"><span class="ic">${d.i}</span><div><b>${esc(d.n)}${r.n > 1 ? ` ×${r.n}` : ''}</b> ${lock ? `<small>${lock}</small>` : d.gear ? '<small>random quality and stats</small>' : d.buff ? `<small>${buffLine(d.buff)}</small>` : ''}<br>${Object.entries(r.in).map(([k, n]) => `<span class="ing ${have(k) >= n ? 'ok' : 'no'}">${ITEMS[k].i} ${ITEMS[k].n} ${have(k)}/${n}</span>`).join('')}</div><div><button data-act="craft" data-id="${r.id}" data-n="1" ${ok ? '' : 'disabled'}>Make</button> <button class="small" data-act="craft" data-id="${r.id}" data-n="5" ${ok ? '' : 'disabled'}>×5</button></div></div>`;
       }
     }
-    if (away.length) h += `<h3>🔨 Other stations</h3><p style="margin:0;color:var(--dim)">${away.map(st => `${STRUCTS[st].i} ${STATION_NAMES[st]} (${RECIPES.filter(r => r.station === st).length} recipes)`).join(' · ')}<br>Walk up to one and press ${act.padUI() ? 'X' : 'E'} to see and make what it can build. Build stations from the Build menu (${act.padUI() ? 'D-pad →' : 'B'}).</p>`;
+    if (away.length) h += `<h3>🔨 Crafting stations</h3><p style="margin:0;color:var(--dim)">${away.map(st => `${STRUCTS[st].i} ${STATION_NAMES[st]} (${RECIPES.filter(r => r.station === st).length} recipes${near[st] ? ', nearby' : ''})`).join(' · ')}<br>Walk up to one and press ${act.padUI() ? 'X' : 'E'} to see and make what it can build. Build stations from the Build menu (${act.padUI() ? 'D-pad →' : 'B'}).</p>`;
     return h;
   }
   function who() {
@@ -137,7 +137,7 @@ export function createUI(S, act) {
     h += `<h3>🌍 Online now <small>${S.who.length} player${S.who.length === 1 ? '' : 's'}</small></h3>`;
     for (const o of S.who) {
       const cl = CLASSES[o.w], self = o.id === S.id;
-      h += `<div class="who"><span><b>${esc(o.name)}</b>${o.tag ? ` [${esc(o.tag)}]` : ''}${self ? ' (you)' : ''} <small>Lv ${o.lv} ${cl ? cl[2] + ' ' + cl[0] : 'Adventurer'} · ${zoneName((o.zl - 1) * 45)}${o.voice ? ' · 🎙' : ''}${o.party === 2 ? ' · in your party' : o.party ? ' · in a party' : ''}</small></span>
+      h += `<div class="who"><span><b>${esc(o.name)}</b>${o.tag ? ` [${esc(o.tag)}]` : ''}${self ? ' (you)' : ''} <small>Lv ${o.lv} ${cl ? cl[2] + ' ' + cl[0] : 'Adventurer'} · ${esc(o.zn)}${o.voice ? ' · 🎙' : ''}${o.party === 2 ? ' · in your party' : o.party ? ' · in a party' : ''}</small></span>
         <span>${self ? '' : `${!o.party && (!pt || lead) ? `<button class="small" data-act="pt" data-op="invite" data-pid="${o.id}">Invite to party</button> ` : ''}<button class="small" data-act="tr" data-op="ask" data-pid="${o.id}" ${o.near ? '' : 'disabled title="Stand next to them to trade"'}>Trade</button>`}</span></div>`;
     }
     return h;
@@ -227,6 +227,7 @@ export function createUI(S, act) {
       ${row('Look up / down', `<button data-act="cfg" data-k="invY">${c.invY ? 'Inverted' : 'Normal'}</button>`)}
       ${row('My doors, chests and stations', `<button data-act="perm">${{ me: 'Only me', clan: 'Me and my clan', party: 'My clan and my party', all: 'Everyone' }[S.me.perm || 'clan']}</button> <small>who can open and use what you built</small>`)}
       ${row('Voice chat', `<button data-act="voice">${act.voiceOn() ? 'On' : 'Off'}</button> <small>talk to players near you (uses your microphone)</small>`)}
+      ${row('Microphone', `<button data-act="mic">🎤 ${esc(act.micName())}</button> <small>click to switch to the next microphone</small>`)}
       ${row('Button hints', `<button data-act="cfg" data-k="hints">${{ auto: 'Automatic', kb: 'Keyboard & mouse', pad: 'Controller' }[c.hints]}</button> <small>which controls the on-screen tips show</small>`)}
       <h3>Game</h3>
       <div class="row"><button data-act="tab" data-t="help">❓ Controls & help</button><button class="danger" data-act="logout">Log out</button></div>
@@ -243,6 +244,7 @@ export function createUI(S, act) {
   }
   function enter(t) {       // things each tab needs fresh from the server
     if (t === 'craft') act.emit('stock', {}, r => { S.stock = r?.stock || {}; if (tab === 'craft') render(); });
+    if (t === 'menu') act.refreshMics().then(() => { if (tab === 'menu') render(); });
     if (t === 'who') act.emit('who', {}, r => { const sig = JSON.stringify(r?.list); if (sig === whoSig) return; whoSig = sig; S.who = r?.list || []; if (tab === 'who') render(); });
   }
   setInterval(() => { if (tab === 'who' && document.activeElement?.tagName !== 'INPUT') enter('who'); }, 3000);
@@ -281,6 +283,7 @@ export function createUI(S, act) {
       case 'recall': close(); act.recall(); break;
       case 'perm': act.emit('perm', { v: { me: 'clan', clan: 'party', party: 'all', all: 'me' }[S.me.perm || 'clan'] }); break;
       case 'voice': act.voiceToggle().then(render); break;
+      case 'mic': act.nextMic().then(render); break;
       case 'pt': act.emit('party', { op: d.op, pid: d.pid }, cb); break;
       case 'tr': act.emit('trade', { op: d.op, pid: d.pid }, r => { if (d.op !== 'ok') cb(r); }); break;
       case 'build': if (!b.classList.contains('off')) { close(); act.startBuild(d.id); } break;

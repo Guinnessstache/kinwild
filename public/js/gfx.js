@@ -1,6 +1,6 @@
 // Everything visual: low-poly models built from code (no art files), terrain, sky, water, lighting.
 import * as THREE from 'three';
-import { heightAt, moistAt, genNodes, N, SIZE, rnd } from '/shared/terrain.js';
+import { heightAt, moistAt, genNodes, zones2, THEMES, N, SIZE, HALF, rnd } from '/shared/terrain.js';
 import { CROPS, STRUCTS } from '/shared/data.js';
 
 export const MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .9, flatShading: true });
@@ -195,43 +195,56 @@ export function ghostOf(s) {
 export function createWorld(scene) {
   // terrain
   const g = new THREE.PlaneGeometry(SIZE, SIZE, N - 1, N - 1); g.rotateX(-Math.PI / 2);
-  const pos = g.attributes.position, col = new Float32Array(pos.count * 3);
+  const pos = g.attributes.position, col = new Float32Array(pos.count * 3), ZC = { a: new THREE.Color(), b: new THREE.Color() };
   const C = { sand: new THREE.Color('#dcc88f'), wet: new THREE.Color('#a89a6c'), grass: new THREE.Color('#7fbf58'), forest: new THREE.Color('#4f9443'), rock: new THREE.Color('#8b8f92'), snow: new THREE.Color('#f3f6f9') }, tc = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i), h = heightAt(x, z); pos.setY(i, h);
     if (h < 0) tc.copy(C.wet).lerp(C.sand, Math.max(0, 1 + h / 3));
     else if (h < 1.3) tc.copy(C.sand);
-    else { tc.copy(C.grass).lerp(C.forest, Math.min(1, Math.max(0, (moistAt(x, z) - .42) * 6))); if (h < 2.2) tc.lerp(C.sand, (2.2 - h) / .9); if (h > 13) tc.lerp(C.rock, Math.min(1, (h - 13) / 3)); if (h > 24) tc.lerp(C.snow, Math.min(1, (h - 24) / 3)); }
+    else {
+      // grass takes its colour from the zone, blended across zone borders so they fade rather than show a line
+      const [za, zb, gap] = zones2(x, z), th = THEMES[za.th]; ZC.a.set(th.grass); ZC.b.set(THEMES[zb.th].grass); ZC.a.lerp(ZC.b, .5 - .5 * Math.min(1, gap / 40));
+      tc.copy(ZC.a).lerp(C.forest, Math.min(1, Math.max(0, (moistAt(x, z) - th.moist + .08) * 4)) * (za.th === 'frost' || za.th === 'autumn' ? .3 : .7)); if (h < 2.2) tc.lerp(C.sand, (2.2 - h) / .9); if (h > 13) tc.lerp(C.rock, Math.min(1, (h - 13) / 3)); if (h > 24) tc.lerp(C.snow, Math.min(1, (h - 24) / 3)); }
     const n = .92 + rnd(Math.round(x), Math.round(z), 5) * .16; col[i * 3] = tc.r * n; col[i * 3 + 1] = tc.g * n; col[i * 3 + 2] = tc.b * n;
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.computeVertexNormals();
   const terrain = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 })); terrain.receiveShadow = true; scene.add(terrain);
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshStandardMaterial({ color: '#3a9fd6', transparent: true, opacity: .8, roughness: .12, metalness: .15 })); water.rotation.x = -Math.PI / 2; scene.add(water);
-  const deep = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshBasicMaterial({ color: '#1d5f8f' })); deep.rotation.x = -Math.PI / 2; deep.position.y = -9.5; scene.add(deep);
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshStandardMaterial({ color: '#3a9fd6', transparent: true, opacity: .8, roughness: .12, metalness: .15 })); water.rotation.x = -Math.PI / 2; scene.add(water);
+  const deep = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshBasicMaterial({ color: '#1d5f8f' })); deep.rotation.x = -Math.PI / 2; deep.position.y = -9.5; scene.add(deep);
 
-  // resource nodes (instanced)
-  const nodes = genNodes(), byType = {}, inst = {}, where = [];
-  for (const n of nodes) (byType[n.t] ||= []).push(n);
+  // Trees, rocks and plants are drawn per 200 m chunk, and only chunks near the camera are shown: the land is too big to draw at once.
+  const CH = 200, VIEW = 380, GRASS_VIEW = 250, nodes = genNodes(), chunks = new Map(), where = [], geos = {};
+  const chunkOf = (x, z) => { const cx = Math.floor((x + HALF) / CH), cz = Math.floor((z + HALF) / CH), k = cx * 100 + cz; let c = chunks.get(k);
+    if (!c) { chunks.set(k, c = { x: -HALF + (cx + .5) * CH, z: -HALF + (cz + .5) * CH, by: {}, g: new THREE.Group(), gg: new THREE.Group() }); c.g.add(c.gg); } return c; };
+  for (const n of nodes) (chunkOf(n.x, n.z).by[n.t] ||= []).push(n);
   const mat4 = (n, alive) => _m.compose(_v.set(n.x, n.y - .05, n.z), _q.setFromEuler(_e.set(0, n.ry, 0)), alive ? _s.setScalar(n.s) : _s.set(0, 0, 0));
-  for (const t in byType) {
-    const im = new THREE.InstancedMesh(nodeGeo(t), MAT, byType[t].length); im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false;
-    byType[t].forEach((n, i) => { im.setMatrixAt(i, mat4(n, true)); where[n.id] = i; }); scene.add(im); inst[t] = im;
+  for (const c of chunks.values()) {
+    for (const t in c.by) {
+      const im = new THREE.InstancedMesh(geos[t] ||= nodeGeo(t), MAT, c.by[t].length); im.castShadow = true; im.receiveShadow = true;
+      c.by[t].forEach((n, i) => { im.setMatrixAt(i, mat4(n, true)); where[n.id] = [im, i]; }); im.computeBoundingSphere(); c.g.add(im);
+    }
+    scene.add(c.g);
   }
-  const setNode = (id, alive) => { const n = nodes[id], im = inst[n.t]; im.setMatrixAt(where[id], mat4(n, alive)); im.instanceMatrix.needsUpdate = true; };
+  const setNode = (id, alive) => { const [im, i] = where[id]; im.setMatrixAt(i, mat4(nodes[id], alive)); im.instanceMatrix.needsUpdate = true; };
 
-  // grass tufts + flowers for a lived-in feel
+  // grass tufts + flowers for a lived-in feel, scattered per chunk too
   const tuft = merge([P(cone(.06, .5, 3), '#8fcc62', 0, .25, 0), P(cone(.05, .4, 3), '#7fbf58', .12, .2, .05, 0, 0, -.3), P(cone(.05, .42, 3), '#9ad36c', -.1, .2, -.06, 0, 0, .3)]);
   const flower = merge([P(cyl(.015, .015, .3, 4), '#5fae4a', 0, .15, 0), P(ico(.07), '#ffffff', 0, .33, 0)]);
-  const scatter = (geo, count, seed, colors) => {
-    const im = new THREE.InstancedMesh(geo, MAT, count); im.frustumCulled = false; im.receiveShadow = true; let k = 0;
-    for (let i = 0; k < count && i < count * 6; i++) {
-      const x = (rnd(i, seed, 1) - .5) * 600, z = (rnd(i, seed, 2) - .5) * 600, h = heightAt(x, z); if (h < 1.6 || h > 14) continue;
-      im.setMatrixAt(k, _m.compose(_v.set(x, h, z), _q.setFromEuler(_e.set(0, rnd(i, seed, 3) * 6, 0)), _s.setScalar(.8 + rnd(i, seed, 4) * .7)));
-      if (colors) im.setColorAt(k, _c.set(colors[i % colors.length])); k++;
+  const FLOW = ['#ffffff', '#ffd84a', '#ff8fb3', '#c58cff', '#ff6b5a'];
+  for (let cx = 0; cx < SIZE / CH; cx++) for (let cz = 0; cz < SIZE / CH; cz++) {
+    const c = chunkOf(-HALF + (cx + .5) * CH, -HALF + (cz + .5) * CH), seed = cx * 31 + cz * 7 + 3;
+    for (const [geo, count, colors] of [[tuft, 780, null], [flower, 200, FLOW]]) {
+      const im = new THREE.InstancedMesh(geo, MAT, count); im.receiveShadow = true; let k = 0;
+      for (let i = 0; k < count && i < count * 3; i++) {
+        const x = c.x + (rnd(i, seed, 1) - .5) * CH, z = c.z + (rnd(i, seed, 2) - .5) * CH, h = heightAt(x, z); if (h < 1.6 || h > 14) continue;
+        im.setMatrixAt(k, _m.compose(_v.set(x, h, z), _q.setFromEuler(_e.set(0, rnd(i, seed, 3) * 6, 0)), _s.setScalar(.8 + rnd(i, seed, 4) * .7)));
+        if (colors) im.setColorAt(k, _c.set(colors[i % colors.length])); k++;
+      }
+      im.count = k; if (k) { im.computeBoundingSphere(); c.gg.add(im); }
     }
-    im.count = k; scene.add(im);
-  };
-  scatter(tuft, 7000, 11); scatter(flower, 1800, 23, ['#ffffff', '#ffd84a', '#ff8fb3', '#c58cff', '#ff6b5a']);
+  }
+  const showNear = focus => { for (const c of chunks.values()) { const d = Math.hypot(c.x - focus.x, c.z - focus.z); c.g.visible = d < VIEW; c.gg.visible = d < GRASS_VIEW; } };      // small grass only close by
+  let lastShow = -1;
 
   // sky
   const sky = new THREE.Mesh(new THREE.SphereGeometry(1200, 24, 12), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, fog: false,
@@ -245,13 +258,13 @@ export function createWorld(scene) {
   const sunM = new THREE.Mesh(new THREE.SphereGeometry(40, 12, 8), new THREE.MeshBasicMaterial({ color: '#fff3c4', fog: false })); scene.add(sunM);
   const moonM = new THREE.Mesh(new THREE.SphereGeometry(26, 12, 8), new THREE.MeshBasicMaterial({ color: '#dfe8ff', fog: false })); scene.add(moonM);
   const cloudMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: .9, fog: false }), clouds = new THREE.Group();
-  for (let i = 0; i < 16; i++) { const c = new THREE.Mesh(merge([0, 1, 2, 3].map(j => P(ico(14 + rnd(i, j, 8) * 10), '#fff', j * 16 - 24, rnd(i, j, 9) * 6, rnd(i, j, 10) * 14, 0, 0, 0, 1.3, .55, 1))), cloudMat); c.position.set((rnd(i, 1, 12) - .5) * 1400, 150 + rnd(i, 2, 12) * 70, (rnd(i, 3, 12) - .5) * 1400); clouds.add(c); }
+  for (let i = 0; i < 30; i++) { const c = new THREE.Mesh(merge([0, 1, 2, 3].map(j => P(ico(14 + rnd(i, j, 8) * 10), '#fff', j * 16 - 24, rnd(i, j, 9) * 6, rnd(i, j, 10) * 14, 0, 0, 0, 1.3, .55, 1))), cloudMat); c.position.set((rnd(i, 1, 12) - .5) * 2400, 150 + rnd(i, 2, 12) * 70, (rnd(i, 3, 12) - .5) * 2400); clouds.add(c); }
   scene.add(clouds);
 
   const hemi = new THREE.HemisphereLight('#cfe8ff', '#6b7a4a', 1); scene.add(hemi);
   const sun = new THREE.DirectionalLight('#fff', 2.5); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -48, right: 48, top: 48, bottom: -48, near: 1, far: 260 }); sun.shadow.bias = -.0006; sun.shadow.normalBias = .04; scene.add(sun, sun.target);
-  scene.fog = new THREE.Fog('#bfe3ff', 90, 520);
+  scene.fog = new THREE.Fog('#bfe3ff', 90, 420);
   const K = { nTop: new THREE.Color('#0a1030'), dTop: new THREE.Color('#3f8fe6'), nBot: new THREE.Color('#1e2a52'), dBot: new THREE.Color('#c4e6ff'), dusk: new THREE.Color('#ff9a5a'), sunC: new THREE.Color('#fff4dd'), moonC: new THREE.Color('#8fa8ff') };
   const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   function update(t, time, focus, cam) {
@@ -265,6 +278,7 @@ export function createWorld(scene) {
     sun.target.position.copy(focus);
     hemi.intensity = .5 + .6 * day; hemi.color.set(day > .5 ? '#cfe8ff' : '#8fa0e0');
     cloudMat.opacity = .25 + .65 * day; clouds.position.x = (time * 3) % 400;
+    if (time - lastShow > .5) { lastShow = time; showNear(focus); }
     water.position.y = Math.sin(time * .8) * .04; water.position.x = cam.position.x; water.position.z = cam.position.z;
     return day;
   }

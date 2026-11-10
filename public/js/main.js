@@ -1,7 +1,7 @@
 // Client: input, third-person controller, networking, and glue between the 3D world and the UI.
 import * as THREE from 'three';
-import { ITEMS, NODES, STRUCTS, ANIMALS, SKILLS, CLASSES, ABIL_CD, QUAL, conColor, combatLevel, zoneLevel, zoneName, calcStats } from '/shared/data.js';
-import { heightAt, SPAWN } from '/shared/terrain.js';
+import { ITEMS, NODES, STRUCTS, ANIMALS, SKILLS, CLASSES, ABIL_CD, QUAL, conColor, combatLevel, calcStats, mobName, atkSpd } from '/shared/data.js';
+import { heightAt, zoneAt, ZONES, SPAWN, HALF, SIZE } from '/shared/terrain.js';
 import * as G from './gfx.js';
 import { createUI } from './ui.js';
 
@@ -109,7 +109,7 @@ let fpsN = 0, fpsT = 0;       // if the first seconds run slowly, drop to fast g
 function fpsWatch(dt) { if (!S.me || localStorage.kwGfx || fpsT < 0) return; fpsN++; fpsT += dt; if (fpsT > 6) { if (fpsN / fpsT < 26 && !navigator.webdriver) { localStorage.kwGfx = 'low'; applyGfx(); ui.toast('Switched to fast graphics for a smoother game (change it in the menu: Esc)'); } fpsT = -1; } }
 
 // ---------- UI ----------
-const act = { emit, sound, select, startBuild, stations, drawMap, toggleGfx, cfg, setCfg, logout, lock, padUI, recall, voiceToggle, voiceOn: () => voice.on };
+const act = { emit, sound, select, startBuild, stations, drawMap, toggleGfx, cfg, setCfg, logout, lock, padUI, recall, voiceToggle, voiceOn: () => voice.on, nextMic, micName: () => micName(), refreshMics: () => refreshMics() };
 const ui = createUI(S, act);
 
 // ---------- login ----------
@@ -148,7 +148,7 @@ const ringGeo = new THREE.RingGeometry(.82, 1, 24); ringGeo.rotateX(-Math.PI / 2
 const myLevel = () => combatLevel(S.me.skills);
 function addAnimal(a) {       // every monster stands on a ring coloured by its level next to yours
   const g = G.makeAnimal(a.t), con = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: conColor(a.L, myLevel()), transparent: true, opacity: .9, depthWrite: false }));
-  con.position.y = .07; con.scale.setScalar(G.ANIMAL_R[a.t] || .7); g.add(con); g.position.set(a.x, a.y, a.z); scene.add(g);
+  con.position.y = .07; con.scale.setScalar(G.ANIMAL_R[a.t] || .7); g.add(con); g.position.set(a.x, a.y, a.z); g.scale.setScalar(1 + Math.min(.6, (a.L - 1) * .022)); scene.add(g);      // tougher monsters are a bit bigger
   S.animals.set(a.id, { ...a, g, con, tx: a.x, ty: a.y, tz: a.z, tr: a.r || 0, mv: 0 });
 }
 function recolor() { const l = myLevel(); for (const a of S.animals.values()) a.con.material.color.set(conColor(a.L, l)); }
@@ -304,7 +304,7 @@ function useStruct(s) {
 function primary() {
   if (S.build) return placeBuild();
   const def = heldDef(), t = S.target;
-  if (def?.tool === 'bow') { if (performance.now() - me.lastSwing < 650) return; swingAnim(); sound('bow'); const aim = aimPoint(), from = new THREE.Vector3(me.x, me.y + 1.4, me.z), dist = aim.distanceTo(from); aim.y += .0015 * dist * dist; aim.sub(from).normalize(); return emit('shoot', { dx: aim.x, dy: aim.y, dz: aim.z }); }
+  if (def?.tool === 'bow') { if (performance.now() - me.lastSwing < atkSpd('bow') * 1000) return; swingAnim(); sound('bow'); const aim = aimPoint(), from = new THREE.Vector3(me.x, me.y + 1.4, me.z), dist = aim.distanceTo(from); aim.y += .0015 * dist * dist; aim.sub(from).normalize(); return emit('shoot', { dx: aim.x, dy: aim.y, dz: aim.z }); }
   if (def?.tool === 'rod') {
     if (S.fishing || performance.now() - me.lastSwing < 700) return; const [fx, fz] = fwd();
     for (let d = 2; d <= 8; d += 1) if (heightAt(me.x + fx * d, me.z + fz * d) < -.1) { swingAnim(); return emit('fish', { x: me.x + fx * d, z: me.z + fz * d }, r => { if (r?.ok) { S.fishing = true; ui.toast('Line is out… stand still and wait for a bite'); } else if (r?.err) ui.toast(r.err); }); }
@@ -313,7 +313,7 @@ function primary() {
   if (def?.tool === 'staff') { if (performance.now() - me.lastSwing < 1350) return; swingAnim(); return emit('heal', { id: t?.k === 'a' ? t.a.id : null }, r => { if (r?.ok === 'heal') { sound('eat'); if (r.name) ui.feed(`✨ Healed ${r.name}`); } else if (r?.ok === 'bolt') sound('bow'); }); }
   const plot = t?.k === 's' && t.s.t === 'farm_plot';
   if (def && (def.food || def.heal || def.slot || def.learn || def.tool === 'water') && !plot) return emit('useItem', { slot: S.sel }, r => { if (r?.ok) sound('eat'); });
-  if (performance.now() - me.lastSwing < 400) return;
+  if (performance.now() - me.lastSwing < (t?.k === 'a' ? atkSpd(def?.tool) * 1000 : 400)) return;       // weapons have attack speeds against monsters
   swingAnim();
   if (t?.k === 'a') { emit('swing', { k: 'a', id: t.a.id }); sound('chop'); }
   else if (t?.k === 'n') { if (NODES[t.node.t].pick) { emit('pick', { id: t.node.id }); sound('pick'); } else { emit('swing', { k: 'n', id: t.node.id }); sound('chop'); } }
@@ -425,7 +425,7 @@ function promptFor(t) {
   const def = heldDef(), pu = padUI(), K = k => `<kbd>${pu ? { E: 'X', Click: 'RT', K: 'R3', T: 'B' }[k] || k : k}</kbd>`;
   if (S.fishing) return '🎣 Waiting for a bite…';
   if (!t) return nearWater() ? `${K('E')} Drink` : '';
-  if (t.k === 'a') return `<b style="color:${conColor(t.a.L, myLevel())}">${ANIMALS[t.a.t].n} · Lv ${t.a.L}</b><span class="mobhp"><i style="width:${t.a.hp ?? 100}%"></i></span>${K('Click')} ${def?.tool === 'staff' ? 'zap (heals come first)' : 'attack'}`;
+  if (t.k === 'a') return `<b style="color:${conColor(t.a.L, myLevel())}">${mobName(ANIMALS[t.a.t].n, t.a.L)} · Lv ${t.a.L}</b><span class="mobhp"><i style="width:${t.a.hp ?? 100}%"></i></span>${K('Click')} ${def?.tool === 'staff' ? 'zap (heals come first)' : 'attack'}`;
   if (t.k === 'n') { const nd = NODES[t.node.t]; if (nd.pick) return `${K('E')} ${nd.verb} ${nd.n}`; const ok = def?.tool === nd.tool; return `${nd.n} — ${K('Click')} ${nd.tool === 'axe' ? (ok ? 'chop' : 'punch for sticks (an axe gets wood)') : (ok ? 'mine' : 'needs a pickaxe')}`; }
   const s = t.s, d = STRUCTS[s.t], own = s.o === S.id ? '' : ` <small>(${s.on})</small>`;
   if (def?.tool === 'hammer') { const l = S.hamList || []; return `${d.n}${own} — ${K('K')} take apart${l.length > 1 ? ` &nbsp; ${K('T')} next piece (${l.findIndex(o => o.s.id === s.id) + 1} of ${l.length})` : ''}`; }
@@ -439,8 +439,17 @@ function promptFor(t) {
 }
 
 // ---------- maps ----------
-const mapImg = (() => { const c = document.createElement('canvas'); c.width = c.height = 320; const x = c.getContext('2d'), im = x.createImageData(320, 320);
-  for (let j = 0; j < 320; j++) for (let i = 0; i < 320; i++) { const h = heightAt(-320 + i * 2, -320 + j * 2), o = (j * 320 + i) * 4; const c3 = h < 0 ? [42 + h * 2, 120 + h * 5, 172 + h * 4] : h < 1.3 ? [222, 204, 150] : h > 24 ? [240, 244, 248] : h > 14 ? [140, 143, 146] : [96 + h * 3, 168 - h * 2, 84]; im.data[o] = c3[0]; im.data[o + 1] = c3[1]; im.data[o + 2] = c3[2]; im.data[o + 3] = 255; }
+// World map: 1 pixel = 2 m. Zone borders are traced on top in a darker line.
+const MPP = 2, MAPPX = SIZE / MPP;
+const zoneGrid = (() => { const n = SIZE / 8, g = new Int16Array(n * n); for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { const x = -HALF + i * 8 + 4, z = -HALF + j * 8 + 4; g[j * n + i] = heightAt(x, z) < .05 ? -1 : zoneAt(x, z).id; } return { n, g }; })();
+const mapImg = (() => { const c = document.createElement('canvas'); c.width = c.height = MAPPX; const x = c.getContext('2d'), im = x.createImageData(MAPPX, MAPPX), { n, g } = zoneGrid;
+  for (let j = 0; j < MAPPX; j++) for (let i = 0; i < MAPPX; i++) {
+    const wx = -HALF + i * MPP, wz = -HALF + j * MPP, h = heightAt(wx, wz), o = (j * MAPPX + i) * 4;
+    let c3 = h < 0 ? [42 + h * 2, 120 + h * 5, 172 + h * 4] : h < 1.3 ? [222, 204, 150] : h > 24 ? [240, 244, 248] : h > 14 ? [140, 143, 146] : [96 + h * 3, 168 - h * 2, 84];
+    const gi = Math.floor(i * MPP / 8), gj = Math.floor(j * MPP / 8), z0 = g[gj * n + gi];
+    if (z0 >= 0 && (i * MPP) % 8 < MPP && gi + 1 < n && gj + 1 < n && (g[gj * n + gi + 1] !== z0 && g[gj * n + gi + 1] >= 0) || z0 >= 0 && (j * MPP) % 8 < MPP && gj + 1 < n && g[(gj + 1) * n + gi] !== z0 && g[(gj + 1) * n + gi] >= 0) c3 = c3.map(v => v * .55);
+    im.data[o] = c3[0]; im.data[o + 1] = c3[1]; im.data[o + 2] = c3[2]; im.data[o + 3] = 255;
+  }
   x.putImageData(im, 0, 0); return c; })();
 function mapDots(x, toPx, scale) {
   const dot = (wx, wz, c, r) => { const [px, py] = toPx(wx, wz); x.fillStyle = c; x.strokeStyle = '#1b1208'; x.lineWidth = 1.5; x.beginPath(); x.arc(px, py, r, 0, 7); x.fill(); x.stroke(); };
@@ -448,13 +457,16 @@ function mapDots(x, toPx, scale) {
   for (const p of S.players.values()) dot(p.char.position.x, p.char.position.z, S.party?.m.some(m => m.id === p.id) ? '#7dff8a' : p.col || '#dddddd', 4 * scale);
   const [px, py] = toPx(me.x, me.z); x.save(); x.translate(px, py); x.rotate(-me.yaw + Math.PI); x.fillStyle = '#fff'; x.strokeStyle = '#1b1208'; x.lineWidth = 2; x.beginPath(); x.moveTo(0, -7 * scale); x.lineTo(5 * scale, 6 * scale); x.lineTo(-5 * scale, 6 * scale); x.closePath(); x.fill(); x.stroke(); x.restore();
 }
-function drawMini() { const c = $('mini'), x = c.getContext('2d'), R = 60, s = 170 / (R * 2); x.drawImage(mapImg, (me.x - R + 320) / 2, (me.z - R + 320) / 2, R, R, 0, 0, 170, 170); mapDots(x, (wx, wz) => [(wx - me.x + R) * s, (wz - me.z + R) * s], 1); }
+function drawMini() { const c = $('mini'), x = c.getContext('2d'), R = 80, s = 170 / (R * 2); x.fillStyle = '#2a6f9e'; x.fillRect(0, 0, 170, 170); x.drawImage(mapImg, (me.x - R + HALF) / MPP, (me.z - R + HALF) / MPP, 2 * R / MPP, 2 * R / MPP, 0, 0, 170, 170); mapDots(x, (wx, wz) => [(wx - me.x + R) * s, (wz - me.z + R) * s], 1); }
 function drawMap(c) {
-  const x = c.getContext('2d'), k = c.width / 640; x.imageSmoothingEnabled = true; x.drawImage(mapImg, 0, 0, c.width, c.height);
-  x.save(); x.setLineDash([6, 5]); x.lineWidth = 1.5; x.font = '700 12px sans-serif'; x.textAlign = 'center';       // level zones ring the starting meadow
-  [90, 180, 270, 360].forEach(r => { x.strokeStyle = 'rgba(255,255,255,.75)'; x.beginPath(); x.arc((SPAWN.x + 320) * k, (SPAWN.z + 320) * k, r * k, 0, 7); x.stroke(); });
-  x.setLineDash([]); ['Home Meadows 1–2', 'Greenwood 3–4', 'Wildwood 5–6', 'Highlands 7–8', 'Far Reaches 9–10'].forEach((n, i) => { for (const sg of [-1, 1]) { const py = (SPAWN.z + 320 + sg * (i * 90 + 45)) * k; if (py > 10 && py < c.height - 6 && (i || sg < 0)) { x.lineWidth = 3; x.strokeStyle = 'rgba(20,14,8,.8)'; x.strokeText(n, (SPAWN.x + 320) * k, py); x.fillStyle = '#fff'; x.fillText(n, (SPAWN.x + 320) * k, py); } } });
-  x.restore(); mapDots(x, (wx, wz) => [(wx + 320) * k, (wz + 320) * k], 1.3);
+  const x = c.getContext('2d'), k = c.width / SIZE, lv = combatLevel(S.me.skills); x.imageSmoothingEnabled = true; x.drawImage(mapImg, 0, 0, c.width, c.height);
+  x.save(); x.textAlign = 'center'; x.lineJoin = 'round';
+  for (const z of ZONES) {         // zone name and levels, coloured like a monster of that zone's lowest level
+    const px = (z.x + HALF) * k, py = (z.z + HALF) * k; if (heightAt(z.x, z.z) < .05) continue;
+    x.font = '700 11px sans-serif'; x.lineWidth = 3; x.strokeStyle = 'rgba(20,14,8,.85)'; x.strokeText(z.name, px, py); x.fillStyle = '#fff'; x.fillText(z.name, px, py);
+    x.font = '700 10px sans-serif'; x.strokeText(`Lv ${z.lo}–${z.hi}`, px, py + 11); x.fillStyle = conColor(z.lo + 1, lv); x.fillText(`Lv ${z.lo}–${z.hi}`, px, py + 11);
+  }
+  x.restore(); mapDots(x, (wx, wz) => [(wx + HALF) * k, (wz + HALF) * k], 1.1);
 }
 
 // ---------- gamepad ----------
@@ -546,9 +558,26 @@ function oskPad(b, hit, lx, ly, dt) {
 
 // ---------- proximity voice chat (WebRTC, browser to browser; the game server only passes the introductions) ----------
 const voice = { on: false, stream: null, peers: new Map() };
+// microphone choice (Menu): kept in this browser; labels only show once the browser has been allowed to use a mic
+let mics = [];
+async function refreshMics() { try { mics = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.deviceId !== 'communications'); } catch { mics = []; } return mics; }
+const micName = () => { const i = mics.findIndex(m => m.deviceId === cfg.mic); const m = i >= 0 ? mics[i] : null; return m ? (m.label || `Microphone ${i + 1}`) : 'System default'; };
+const micOpts = () => ({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, ...(cfg.mic ? { deviceId: { exact: cfg.mic } } : {}) } });
+async function getMic() { try { return await navigator.mediaDevices.getUserMedia(micOpts()); } catch (e) { if (!cfg.mic) throw e; cfg.mic = ''; return navigator.mediaDevices.getUserMedia(micOpts()); } }      // a saved mic that is unplugged falls back to the default
+async function nextMic() {
+  await refreshMics(); if (!mics.length) return ui.toast('No microphones found', 'bad');
+  const list = ['', ...mics.map(m => m.deviceId)], i = list.indexOf(cfg.mic || ''); cfg.mic = list[(i + 1) % list.length];
+  try { localStorage.kwCfg = JSON.stringify(cfg); } catch { }
+  if (voice.on) {            // swap the live microphone without hanging up on anyone
+    const old = voice.stream; try { voice.stream = await getMic(); } catch { ui.toast('Could not open that microphone', 'bad'); voice.stream = old; return; }
+    const tr = voice.stream.getAudioTracks()[0]; for (const p of voice.peers.values()) for (const sd of p.pc.getSenders()) if (sd.track?.kind === 'audio') sd.replaceTrack(tr);
+    old?.getTracks().forEach(t => t.stop());
+  }
+  ui.toast('🎤 Microphone: ' + micName());
+}
 async function voiceToggle() {
   if (voice.on) { voice.on = false; emit('voice', { on: false }); voice.stream?.getTracks().forEach(t => t.stop()); for (const id of [...voice.peers.keys()]) voiceDrop(id); ui.toast('Voice chat off'); return; }
-  try { voice.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+  try { voice.stream = await getMic(); refreshMics(); }
   catch { ui.toast('No microphone, or the browser was not allowed to use it', 'bad'); return; }
   voice.on = true; emit('voice', { on: true }); for (const id of S.voice) if (id !== S.id) voiceLink(id);
   ui.toast('Voice chat on — players near you can hear you', 'good');
@@ -591,7 +620,7 @@ function updateMe(dt) {
   for (const c of col.circ) { if (me.y > c.y1 || me.y + 1.7 < c.y0) continue; const R = c.r + .35, dx = nx - c.x, dz = nz - c.z, d = Math.hypot(dx, dz); if (d < R && d > .001) { nx = c.x + dx / d * R; nz = c.z + dz / d * R; } }
   for (const w of col.walls) { if (me.y >= w.y1 - .05 || me.y + 1.7 <= w.y0) continue; const ex = w.x2 - w.x1, ez = w.z2 - w.z1, t = Math.min(1, Math.max(0, ((nx - w.x1) * ex + (nz - w.z1) * ez) / (ex * ex + ez * ez))), qx = w.x1 + ex * t, qz = w.z1 + ez * t, dx = nx - qx, dz = nz - qz, d = Math.hypot(dx, dz); if (d < .42) { if (d > .001) { nx = qx + dx / d * .42; nz = qz + dz / d * .42; } else { nx = me.x; nz = me.z; } } }
   for (const s of col.surf) if (s.solid && nx > s.x0 - .3 && nx < s.x1 + .3 && nz > s.z0 - .3 && nz < s.z1 + .3 && me.y + .8 < s.top && me.y > s.top - 3.4) { nx = me.x; nz = me.z; break; }
-  nx = Math.max(-316, Math.min(316, nx)); nz = Math.max(-316, Math.min(316, nz));
+  nx = Math.max(-(HALF - 42), Math.min(HALF - 42, nx)); nz = Math.max(-(HALF - 42), Math.min(HALF - 42, nz));
   me.x = nx; me.z = nz;
   const gy = groundAt(nx, nz, me.y);
   if (swim) { me.y += (-1.2 - me.y) * Math.min(1, dt * 6); me.vy = 0; me.grounded = false; }
@@ -653,13 +682,13 @@ function frame() {
     slowT += dt; if (slowT > .25) {
       slowT = 0; $('prompt').innerHTML = ui.tab ? '' : promptFor(S.target); $('bStam').style.width = S.stam + '%'; drawMini();
       // zone, class ability and buff readouts
-      const zd = Math.hypot(me.x - SPAWN.x, me.z - SPAWN.z), zn = zoneName(zd), zi = Math.min(4, Math.floor(zd / 90));
-      if (S.zone !== zn) { if (S.zone) ui.toast(`Entering ${zn} — monsters level ${zi * 2 + 1}–${zi * 2 + 2}`, zi * 2 + 1 > myLevel() + 1 ? 'bad' : ''); S.zone = zn; }
+      const zo = zoneAt(me.x, me.z), zn = zo.name;
+      if (S.zone !== zn) { if (S.zone) ui.toast(`Entering ${zn} — monsters level ${zo.lo}–${zo.hi}`, zo.lo > myLevel() + 1 ? 'bad' : ''); S.zone = zn; }
       const tool = heldDef()?.tool, cl = CLASSES[tool], cdl = Math.ceil(((S.cd[tool] || 0) - performance.now()) / 1000), bf = S.me.buff && S.me.buff.until > Date.now() + S.off ? S.me.buff : null;
       S.speed = bf ? ITEMS[bf.id].buff.st.speed || 0 : 0;
       $('abil').innerHTML = (cl ? `<div class="${cdl > 0 ? 'cd' : ''}">${cl[2]} ${cl[3]}<small>${cdl > 0 ? cdl + 's' : padUI() ? 'B' : 'Q'}</small></div>` : '') + (bf ? `<div class="buff">${ITEMS[bf.id].i} Buff<small>${Math.ceil((bf.until - Date.now() - S.off) / 60000)} min</small></div>` : '') + (S.recall ? `<div>🏠 Home<small>${Math.ceil((S.recall.t - performance.now()) / 1000)}s</small></div>` : '');
       voiceVolumes();
-      const hr = Math.floor(S.time * 24), mn = Math.floor((S.time * 24 % 1) * 60 / 10) * 10; $('clock').textContent = `${S.time > .23 && S.time < .77 ? '☀️' : '🌙'} ${String(hr).padStart(2, '0')}:${String(mn).padStart(2, '0')} · ${zn} Lv ${zi * 2 + 1}–${zi * 2 + 2}`;
+      const hr = Math.floor(S.time * 24), mn = Math.floor((S.time * 24 % 1) * 60 / 10) * 10; $('clock').textContent = `${S.time > .23 && S.time < .77 ? '☀️' : '🌙'} ${String(hr).padStart(2, '0')}:${String(mn).padStart(2, '0')} · ${zn} Lv ${zo.lo}–${zo.hi}`;
       const now = Date.now() + S.off; let lights = [];
       for (const s of S.structs.values()) { if (s.t === 'farm_plot') G.setCrop(s.g, s.d, now); if (s.g.userData.light) lights.push(s); }
       lights.sort((a, b) => Math.hypot(a.x - me.x, a.z - me.z) - Math.hypot(b.x - me.x, b.z - me.z)).forEach((s, i) => s.g.userData.light.visible = i < 5);

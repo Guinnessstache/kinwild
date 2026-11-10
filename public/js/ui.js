@@ -5,7 +5,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 
 export function createUI(S, act) {
   let tab = null, pick = null, clanMsg = '';
-  const TABS = [['bag', '🎒 Bag'], ['craft', '🛠️ Craft'], ['build', '🏠 Build'], ['clan', '🚩 Clan'], ['map', '🗺️ Map'], ['help', '❓ Help']];
+  const TABS = [['bag', '🎒 Bag'], ['craft', '🛠️ Craft'], ['build', '🏠 Build'], ['clan', '🚩 Clan'], ['map', '🗺️ Map'], ['help', '❓ Help'], ['menu', '⚙️ Menu']];
   const count = id => S.me.inv.reduce((a, it) => a + (it && it.id === id ? it.n : 0), 0);
   const slot = (it, c, s, cls = '', label = '') => {
     const d = it && ITEMS[it.id];
@@ -86,13 +86,23 @@ export function createUI(S, act) {
     }
     return h;
   }
+  // what a building piece costs, with what you have, and where to get the first thing you are short of
+  const costHtml = cost => Object.entries(cost).map(([k, n]) => `<span class="ing ${count(k) >= n ? 'ok' : 'no'}">${ITEMS[k].i} ${ITEMS[k].n} ${count(k)}/${n}</span>`).join('');
+  function costHint(d) {
+    const tool = d.needs || (d.free ? null : 'hammer');
+    if (tool && !count(tool)) return `You need a ${ITEMS[tool].n} in your bag — craft one (C)`;
+    const k = Object.keys(d.cost).find(k => count(k) < d.cost[k]); if (!k) return '';
+    const r = RECIPES.find(r => r.out === k);
+    return r ? `Make ${ITEMS[k].n} ${r.station ? `at a ${STATION_NAMES[r.station]}` : 'by hand'} (C) from ${Object.keys(r.in).map(i => ITEMS[i].n).join(' + ')}` : `Gather more ${ITEMS[k].n}`;
+  }
   function build() {
-    const lv = S.me.skills.building.l; let h = `<p style="margin-top:0;color:var(--dim)">Pick something, aim where you want it, then left click. <b>R</b> turns it, <b>Z</b> changes the floor level. You need a Building Hammer in your bag (Building Lv ${lv}).</p>`;
+    const lv = S.me.skills.building.l; let h = `<p style="margin-top:0;color:var(--dim)">Pick something, aim where you want it, then place it. Each card lists what it costs and how much you have (green = enough, red = short). You need a Building Hammer in your bag (Building Lv ${lv}).</p>`;
     for (const cat of ['Camp', 'Farm', 'Building', 'Clan']) {
       h += `<h3>${cat}</h3><div class="cards">`;
       for (const [id, d] of Object.entries(STRUCTS)) if (d.cat === cat) {
         const ok = lv >= d.lvl && Object.entries(d.cost).every(([k, n]) => count(k) >= n);
-        h += `<div class="card ${lv >= d.lvl ? '' : 'off'}" data-act="build" data-id="${id}"><span class="ic">${d.i}</span><b>${esc(d.n)}</b>${lv >= d.lvl ? Object.entries(d.cost).map(([k, n]) => `<span class="ing ${count(k) >= n ? 'ok' : 'no'}">${ITEMS[k].i}${count(k)}/${n}</span>`).join('') : `<small>🔒 Building Lv ${d.lvl}</small>`}${ok ? '' : ''}</div>`;
+        const hint = lv >= d.lvl ? costHint(d) : '';
+        h += `<div class="card ${lv >= d.lvl ? '' : 'off'} ${ok ? 'can' : ''}" data-act="build" data-id="${id}" title="${esc('Needs ' + Object.entries(d.cost).map(([k, n]) => `${n} ${ITEMS[k].n} (you have ${count(k)})`).join(', ') + (hint ? '. ' + hint : ''))}"><span class="ic">${d.i}</span><b>${esc(d.n)}</b><div class="cost">${lv >= d.lvl ? costHtml(d.cost) : `<small>🔒 Building Lv ${d.lvl}</small>`}</div>${hint ? `<small class="hint">${esc(hint)}</small>` : ''}</div>`;
       }
       h += '</div>';
     }
@@ -123,9 +133,9 @@ export function createUI(S, act) {
     <p><kbd>Mouse</kbd> look around (click the game first) · <kbd>Wheel</kbd> or <kbd>1–8</kbd> pick a hotbar item</p>
     <p><kbd>Left click</kbd> use what you hold: swing, chop, mine, shoot, fish, eat, plant</p>
     <p><kbd>E</kbd> pick things up, open chests and doors, drink, harvest, use stations</p>
-    <p><kbd>Tab</kbd> bag & skills · <kbd>C</kbd> craft · <kbd>B</kbd> build · <kbd>G</kbd> clan · <kbd>M</kbd> map · <kbd>Enter</kbd> chat</p>
+    <p><kbd>Tab</kbd> bag & skills · <kbd>C</kbd> craft · <kbd>B</kbd> build · <kbd>G</kbd> clan · <kbd>M</kbd> map · <kbd>Esc</kbd> menu & settings · <kbd>Enter</kbd> chat</p>
     <p><kbd>K</kbd> with the hammer in hand: take apart what you're looking at (you get half the materials back)</p>
-    <p><b>🎮 Controller:</b> <kbd>Left stick</kbd> move · <kbd>Right stick</kbd> look · <kbd>A</kbd> jump · <kbd>X</kbd> pick up / use · <kbd>RT</kbd> use held item (hold to keep going) · <kbd>LB</kbd> <kbd>RB</kbd> action bar · <kbd>L3</kbd> run · <kbd>LT</kbd> sneak · <kbd>Y</kbd> bag · <kbd>D-pad</kbd> ↑ craft, → build, ← clan, ↓ map · <kbd>Start</kbd> help · <kbd>R3</kbd> take apart (hammer)</p>
+    <p><b>🎮 Controller:</b> <kbd>Left stick</kbd> move · <kbd>Right stick</kbd> look · <kbd>A</kbd> jump · <kbd>X</kbd> pick up / use · <kbd>RT</kbd> use held item (hold to keep going) · <kbd>LB</kbd> <kbd>RB</kbd> action bar · <kbd>L3</kbd> run · <kbd>LT</kbd> sneak · <kbd>Y</kbd> bag · <kbd>D-pad</kbd> ↑ craft, → build, ← clan, ↓ map · <kbd>Start</kbd> menu · <kbd>R3</kbd> take apart (hammer)</p>
     <p><b>🎮 In menus:</b> <kbd>D-pad</kbd>/<kbd>stick</kbd> move the highlight · <kbd>A</kbd> choose (pick an item, then A on another slot moves it) · <kbd>X</kbd> eat / wear / quick-move · <kbd>LB</kbd> <kbd>RB</kbd> switch tab · <kbd>B</kbd> close. Building: <kbd>RT</kbd> place · <kbd>X</kbd> turn · <kbd>Y</kbd> floor · <kbd>B</kbd> done. Typing a name or chat still needs a keyboard.</p>
     <p><b>Getting started:</b> punch trees for sticks, grab loose stones and tall grass, then craft a Stone Axe. Follow the “Next step” box — it walks you through everything.</p>
     <p><b>Skills</b> grow by doing the thing. Higher levels give bonus loot, unlock recipes and building pieces.</p>
@@ -135,18 +145,34 @@ export function createUI(S, act) {
     <p><b>Night:</b> wolves roam the deep woods after dark but never come near a campfire or torch post. Sleep spots: a Bed sets where you wake up.</p>
     <p><b>Clans:</b> press G. Clan-mates share everything you build.</p>
     <p><b>If you get knocked out</b> you wake up at your bed with all your stuff.</p></div>
-    <div class="row" style="margin-top:12px"><button data-act="gfx">Graphics: ${localStorage.kwGfx === 'low' ? 'Fast' : 'Pretty'} (click to switch)</button></div>`;
+    <div class="row" style="margin-top:12px"><button data-act="tab" data-t="menu">⚙️ Settings and log out</button></div>`;
+
+  function menu() {
+    const c = act.cfg, row = (label, body) => `<div class="mrow"><b>${label}</b><span>${body}</span></div>`;
+    const step = (k, txt) => `<button class="small" data-act="cfg" data-k="${k}" data-d="-1">−</button><span class="val">${txt}</span><button class="small" data-act="cfg" data-k="${k}" data-d="1">+</button>`;
+    return `<div class="menu"><button data-act="resume" class="big">▶ Back to game</button>
+      <h3>Settings</h3>
+      ${row('Graphics', `<button data-act="gfx">${localStorage.kwGfx === 'low' ? 'Fast' : 'Pretty'}</button> <small>Fast turns shadows off for slower computers</small>`)}
+      ${row('Sound volume', step('vol', c.mute ? 'Muted' : c.vol + '%') + ` <button class="small" data-act="cfg" data-k="mute">${c.mute ? 'Unmute' : 'Mute'}</button>`)}
+      ${row('Mouse look speed', step('sens', c.sens + '%'))}
+      ${row('Controller look speed', step('padSens', c.padSens + '%'))}
+      ${row('Look up / down', `<button data-act="cfg" data-k="invY">${c.invY ? 'Inverted' : 'Normal'}</button>`)}
+      ${row('Button hints', `<button data-act="cfg" data-k="hints">${{ auto: 'Automatic', kb: 'Keyboard & mouse', pad: 'Controller' }[c.hints]}</button> <small>which controls the on-screen tips show</small>`)}
+      <h3>Game</h3>
+      <div class="row"><button data-act="tab" data-t="help">❓ Controls & help</button><button class="danger" data-act="logout">Log out</button></div>
+      <p style="color:var(--dim)">Playing as <b>${esc(S.me.name)}</b>. Your character and the world save automatically. Logging out returns to the name screen so someone else can play on this computer.</p></div>`;
+  }
 
   function render() {
     if (!tab) return;
     $('tabs').innerHTML = TABS.map(([k, n]) => `<button data-tab="${k}" class="${k === tab ? 'on' : ''}">${n}</button>`).join('');
     const top = $('pbody').scrollTop;
-    $('pbody').innerHTML = tab === 'bag' ? bag() : tab === 'craft' ? craft() : tab === 'build' ? build() : tab === 'clan' ? clan() : tab === 'map' ? '<canvas id="bigmap" width="520" height="520"></canvas><p style="text-align:center;color:var(--dim)">⬤ you · clan-mates in your clan colour · 🏠 your buildings</p>' : help();
+    $('pbody').innerHTML = tab === 'bag' ? bag() : tab === 'craft' ? craft() : tab === 'build' ? build() : tab === 'clan' ? clan() : tab === 'map' ? '<canvas id="bigmap" width="520" height="520"></canvas><p style="text-align:center;color:var(--dim)">⬤ you · clan-mates in your clan colour · 🏠 your buildings</p>' : tab === 'menu' ? menu() : help();
     $('pbody').scrollTop = top;
     if (tab === 'map') act.drawMap($('bigmap'));
   }
   function open(t) { if (tab === t) return close(); tab = t; pick = null; clanMsg = ''; $('panel').hidden = false; document.exitPointerLock?.(); render(); $('pbody').scrollTop = 0; }
-  function close() { if (!tab) return; tab = null; pick = null; $('panel').hidden = true; if (S.chest) { S.chest = null; act.emit('closeChest'); } }
+  function close() { if (!tab) return; tab = null; pick = null; $('panel').hidden = true; if (S.chest) { S.chest = null; act.emit('closeChest'); } act.lock(); }
   $('pclose').onclick = close;
   $('tabs').addEventListener('click', e => { const t = e.target.dataset.tab; if (t && t !== tab) { tab = t; pick = null; render(); $('pbody').scrollTop = 0; } });
   $('pbody').addEventListener('contextmenu', e => {
@@ -163,7 +189,11 @@ export function createUI(S, act) {
       return render(); }
     const b = e.target.closest('[data-act]'); if (!b || b.disabled) return; const d = b.dataset, cb = r => { clanMsg = r?.err || r?.msg || ''; render(); };
     switch (d.act) {
-      case 'gfx': act.toggleGfx(); break;
+      case 'gfx': act.toggleGfx(); render(); break;
+      case 'resume': close(); break;
+      case 'cfg': act.setCfg(d.k, +d.d || 0); render(); break;
+      case 'tab': tab = d.t; render(); $('pbody').scrollTop = 0; break;
+      case 'logout': act.logout(); break;
       case 'use': act.emit('useItem', { slot: pick.s }); pick = null; break;
       case 'trash': act.emit('trash', { slot: pick.s }); pick = null; break;
       case 'unequip': { const j = S.me.inv.findIndex(x => !x); if (j < 0) toast('Your bag is full', 'bad'); else act.emit('invMove', { f: [2, 0], t: [0, j] }); break; }
@@ -179,7 +209,7 @@ export function createUI(S, act) {
   $('panel').addEventListener('keydown', e => { if (e.target.tagName === 'INPUT') e.stopPropagation(); });
 
   return {
-    open, close, render, toast, feed, chat, hotbar, vitals, quest, numKey,
+    open, close, render, toast, feed, chat, hotbar, vitals, quest, numKey, costHtml, costHint,
     get tab() { return tab; },
     refresh() { if (drag) return; hotbar(); quest(); const a = document.activeElement; if (tab && tab !== 'map' && !(a && a.tagName === 'INPUT' && $('panel').contains(a))) render(); },
   };

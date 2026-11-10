@@ -118,6 +118,7 @@ export class Game {
   // ---------- inventory helpers ----------
   count(p, id) { let n = 0; for (const it of p.inv) if (it && it.id === id) n += it.n; return n; }
   take(p, id, n) { for (let i = 0; i < p.inv.length && n > 0; i++) { const it = p.inv[i]; if (it && it.id === id) { const k = Math.min(n, it.n); it.n -= k; n -= k; if (it.n <= 0) p.inv[i] = null; } } p._inv = true; }
+  missing(p, cost) { return Object.entries(cost).filter(([k, n]) => this.count(p, k) < n).map(([k, n]) => `${n - this.count(p, k)} more ${ITEMS[k].n}`).join(' and '); }
   hasAll(p, cost, mul = 1) { for (const k in cost) if (this.count(p, k) < cost[k] * mul) return false; return true; }
   give(p, id, n = 1, durMul = 1) {
     const def = ITEMS[id]; if (!def || n <= 0) return; let left = n;
@@ -368,7 +369,7 @@ export class Game {
       for (const k in rc.in) this.take(p, k, rc.in[k]);
       this.give(p, rc.out, rc.n, 1 + 0.02 * (this.lvl(p, 'crafting') - 1)); this.xp(p, rc.sk, rc.xp); made++;
     }
-    if (!made) return this.toast(p, 'Missing ingredients', 'bad');
+    if (!made) return this.toast(p, `${ITEMS[rc.out].n} needs ` + this.missing(p, rc.in), 'bad');
     this.quest(p, 'craft:' + rc.out);
     if (ITEMS[rc.out].tier === 'iron') this.quest(p, 'craft:iron');
     if (rc.sk === 'cooking') this.quest(p, 'cook');
@@ -386,7 +387,7 @@ export class Game {
     if (this.lvl(p, 'building') < def.lvl) return { err: `Needs Building level ${def.lvl}` };
     if (def.needs ? !this.count(p, def.needs) : (!def.free && !this.count(p, 'hammer'))) return { err: def.needs ? 'You need a Hoe for that' : 'You need a Building Hammer (craft one with C)' };
     if (def.clan && !p.clan) return { err: 'Join or create a clan first (G)' };
-    if (!this.hasAll(p, def.cost)) return { err: 'Not enough materials' };
+    if (!this.hasAll(p, def.cost)) return { err: `${def.n} needs ` + this.missing(p, def.cost) };
     for (const s of this.structs.values()) {
       const sd = STRUCTS[s.t]; if (Math.abs(s.x - x) > 0.3 || Math.abs(s.z - z) > 0.3 || Math.abs(s.y - y) > 0.5) continue;
       if (sd.kind === def.kind && (def.kind !== 'wall' || s.r === r)) return { err: 'Something is already built there' };

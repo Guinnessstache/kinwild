@@ -52,8 +52,9 @@ Each player picks a name and a PIN. Same name + PIN brings the character back on
 | R / Z | In build mode: turn the piece / change floor level |
 | K | With the hammer held: take apart what you are looking at (half the materials back) |
 | Enter | Chat. `/c hello` talks to your clan only |
+| Esc | Menu: graphics, sound volume, look speed, button hints, log out |
 
-**Controller:** standard Xbox/PlayStation-style gamepads work in the browser (plug in or pair, then press any button). Left stick move, right stick look, A jump, X pick up / use, RT use held item (hold to keep swinging), LB/RB action bar, L3 run, LT sneak, R3 take apart, Y bag, D-pad up/right/left/down for craft/build/clan/map, Start for help. In menus: D-pad moves the highlight, A chooses (A on an item, then A on a slot moves it), X eats or quick-moves, LB/RB switch tabs, B closes. Building: RT place, X turn, Y floor, B done. Typing (name, PIN, chat, clan name) still needs a keyboard.
+**Controller:** standard Xbox/PlayStation-style gamepads work in the browser (plug in or pair, then press any button). Left stick move, right stick look, A jump, X pick up / use, RT use held item (hold to keep swinging), LB/RB action bar, L3 run, LT sneak, R3 take apart, Y bag, D-pad up/right/left/down for craft/build/clan/map, Start for the menu. In menus: D-pad moves the highlight, A chooses (A on an item, then A on a slot moves it), X eats or quick-moves, LB/RB switch tabs, B closes. Building: RT place, X turn, Y floor, B done. Typing (name, PIN, chat, clan name) still needs a keyboard.
 
 **Moving items:** drag them between the bag, a chest and the action bar (the bar at the bottom of the screen works as a drop target too); or point at an item and press 1-8; or shift-click; or click an item and then click where it goes.
 

@@ -28,7 +28,21 @@ for (const n of world.nodes) { const k = gk(n.x, n.z); (grid.get(k) || grid.set(
 function nodesNear(x, z, fn) { for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const a = grid.get(gk(x + i * 8, z + j * 8)); if (a) for (const n of a) if (!S.dead.has(n.id)) fn(n); } }
 
 // ---------- audio (tiny synth, no files) ----------
-let ac; function beep(f, d = .08, type = 'triangle', v = .06, slide = 0) { try { ac ||= new AudioContext(); const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.value = f; if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), ac.currentTime + d); g.gain.value = v; g.gain.exponentialRampToValueAtTime(.0001, ac.currentTime + d); o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime + d); } catch { } }
+// ---------- settings (kept in this browser) ----------
+const cfg = { vol: 70, mute: false, sens: 100, padSens: 100, invY: false, hints: 'auto' };
+try { Object.assign(cfg, JSON.parse(localStorage.kwCfg || '{}')); } catch { }
+function setCfg(k, d) {
+  if (k === 'mute' || k === 'invY') cfg[k] = !cfg[k];
+  else if (k === 'hints') cfg.hints = { auto: 'kb', kb: 'pad', pad: 'auto' }[cfg.hints] || 'auto';
+  else if (k === 'vol') { cfg.vol = Math.max(0, Math.min(100, cfg.vol + d * 10)); cfg.mute = false; }
+  else cfg[k] = Math.max(20, Math.min(300, cfg[k] + d * 20));
+  try { localStorage.kwCfg = JSON.stringify(cfg); } catch { }
+  if (k === 'vol' || k === 'mute') sound('pick');
+}
+const padUI = () => cfg.hints === 'pad' || (cfg.hints === 'auto' && !!S.pad);     // show controller button names?
+function logout() { try { localStorage.removeItem('kwToken'); } catch { } sock.disconnect(); location.href = location.pathname; }
+
+let ac; function beep(f, d = .08, type = 'triangle', v = .06, slide = 0) { v *= cfg.mute ? 0 : cfg.vol / 70; if (v <= 0) return; try { ac ||= new AudioContext(); const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.value = f; if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), ac.currentTime + d); g.gain.value = v; g.gain.exponentialRampToValueAtTime(.0001, ac.currentTime + d); o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime + d); } catch { } }
 const sound = k => ({ chop: () => beep(140, .09, 'square', .05, -60), pick: () => beep(620, .07, 'sine', .06, 300), craft: () => { beep(520, .08); setTimeout(() => beep(780, .1), 80); }, lvl: () => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, .16, 'triangle', .08), i * 110)), hurt: () => beep(180, .2, 'sawtooth', .07, -100), eat: () => beep(300, .1, 'sine', .06, 120), place: () => beep(200, .1, 'square', .05, 80), bow: () => beep(700, .12, 'sine', .05, -500) }[k]?.());
 
 // ---------- graphics quality ----------
@@ -37,10 +51,10 @@ function applyGfx() { const low = localStorage.kwGfx === 'low'; renderer.setPixe
 function toggleGfx() { localStorage.kwGfx = localStorage.kwGfx === 'low' ? 'high' : 'low'; applyGfx(); ui.toast('Graphics: ' + (localStorage.kwGfx === 'low' ? 'Fast' : 'Pretty')); }
 applyGfx();
 let fpsN = 0, fpsT = 0;       // if the first seconds run slowly, drop to fast graphics once (unless the player chose)
-function fpsWatch(dt) { if (!S.me || localStorage.kwGfx || fpsT < 0) return; fpsN++; fpsT += dt; if (fpsT > 6) { if (fpsN / fpsT < 26 && !navigator.webdriver) { localStorage.kwGfx = 'low'; applyGfx(); ui.toast('Switched to fast graphics for a smoother game (change it in Help)'); } fpsT = -1; } }
+function fpsWatch(dt) { if (!S.me || localStorage.kwGfx || fpsT < 0) return; fpsN++; fpsT += dt; if (fpsT > 6) { if (fpsN / fpsT < 26 && !navigator.webdriver) { localStorage.kwGfx = 'low'; applyGfx(); ui.toast('Switched to fast graphics for a smoother game (change it in the menu: Esc)'); } fpsT = -1; } }
 
 // ---------- UI ----------
-const act = { emit, sound, select, startBuild, stations, drawMap, toggleGfx };
+const act = { emit, sound, select, startBuild, stations, drawMap, toggleGfx, cfg, setCfg, logout, lock };
 const ui = createUI(S, act);
 
 // ---------- login ----------
@@ -125,7 +139,7 @@ sock.on('s', sn => {
   for (const [id, x, y, z, r, a, held] of sn.p) { const p = S.players.get(id); if (p) { p.tx = x; p.ty = y; p.tz = z; p.tr = r; p.a = a; G.setHeld(p.char, held || null, ITEMS[held]); } }
   for (const [id, x, y, z, r, mv] of sn.a) { const a = S.animals.get(id); if (a) { a.tx = x; a.ty = y; a.tz = z; a.tr = r; a.mv = mv; } }
 });
-sock.on('me', u => { Object.assign(S.me, u); if (u.hp != null) ui.vitals(); if (u.inv || u.skills || u.quest != null) ui.refresh(); });
+sock.on('me', u => { Object.assign(S.me, u); if (u.hp != null) ui.vitals(); if (u.inv || u.skills || u.quest != null) { ui.refresh(); buildBar(); } });
 sock.on('nd', ([id, alive]) => { alive ? S.dead.delete(id) : S.dead.add(id); world.setNode(id, !!alive); });
 sock.on('st+', s => S.me && addStruct(s)); sock.on('st-', id => { const s = S.structs.get(id); if (s) { scene.remove(s.g); S.structs.delete(id); rebuildCol(); } });
 sock.on('st~', u => { const s = S.structs.get(u.id); if (!s) return; if (u.d) s.d = u.d; if ('c' in u) { s.c = u.c; if (s.t === 'clan_banner' && u.cc !== s.cc) { s.cc = u.cc; return addStruct(s); } } syncStruct(s); rebuildCol(); });
@@ -153,11 +167,11 @@ function select(i) { S.sel = (i + 8) % 8; emit('sel', { i: S.sel }); ui.hotbar()
 const playing = () => S.me && !ui.tab;
 addEventListener('keydown', e => {
   if (!S.me || e.target.tagName === 'INPUT') return;
-  S.pad = false;
+  if (performance.now() - pad.lastT > 1500) S.pad = false;
   if (e.code === 'Tab' || (e.code === 'Space') || e.code.startsWith('Arrow')) e.preventDefault();
   if (e.repeat) return; S.keys[e.code] = true;
-  if (e.code === 'Escape') { if (S.build) stopBuild(); ui.close(); return; }
-  if (e.code === 'Enter') { $('chatin').focus(); document.exitPointerLock?.(); e.preventDefault(); return; }
+  if (e.code === 'Escape') { if (performance.now() - lockLostT < 400) return; escT = performance.now(); if (S.build) stopBuild(); else if (ui.tab) ui.close(); else ui.open('menu'); return; }
+  if (e.code === 'Enter') { $('chatin').focus(); document.exitPointerLock?.(); e.preventDefault(); return; }       // focus first so losing the mouse capture is not read as Esc
   const tabs = { Tab: 'bag', KeyI: 'bag', KeyC: 'craft', KeyB: 'build', KeyG: 'clan', KeyM: 'map', KeyH: 'help' };
   if (tabs[e.code]) { if (e.code === 'KeyB' && S.build) return stopBuild(); ui.open(tabs[e.code]); return; }
   if (ui.tab) { if (e.code.startsWith('Digit')) { const n = +e.code.slice(5); if (n >= 1 && n <= 8) ui.numKey(n - 1); } return; }
@@ -170,18 +184,32 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { S.keys[e.code] = false; });
 addEventListener('blur', () => { S.keys = {}; });
-let dragging = false, lockFailed = !('requestPointerLock' in canvas);
-document.addEventListener('pointerlockerror', () => { lockFailed = true; });
+// Mouse capture. After Esc the browser refuses a new capture for about a second, so a refused request is retried
+// a few times instead of giving up for good (that was why the pointer stayed loose after coming back from Esc).
+let dragging = false, lockTries = 0, lockLostT = -1e9, escT = -1e9; const canLock = 'requestPointerLock' in canvas;
+function lock(fresh = true) {
+  if (!canLock || !S.me || ui.tab || document.pointerLockElement === canvas) return;
+  if (fresh) lockTries = 8;
+  const again = () => { if (lockTries-- > 0) setTimeout(() => lock(false), 300); };
+  try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(again); } catch { again(); }
+}
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement === canvas) { lockTries = 0; if (ui.tab) document.exitPointerLock(); return; }      // a late capture must not grab the mouse from an open panel
+  // capture ended: if the game did not do it itself (opening a panel or chat), the player pressed Esc
+  if (!S.me || ui.tab || document.activeElement?.tagName === 'INPUT' || performance.now() - escT < 400) return;      // (the Esc key press itself was already handled)
+  lockLostT = performance.now(); lockTries = 0; S.keys = {};
+  if (S.build) stopBuild(); else ui.open('menu');
+});
 canvas.addEventListener('mousedown', e => {
   if (!S.me || ui.tab) return;
-  if (document.pointerLockElement !== canvas && !lockFailed) { canvas.requestPointerLock?.()?.catch?.(() => { lockFailed = true; }); dragging = true; return; }
+  if (performance.now() - pad.lastT > 1500) S.pad = false;
+  if (canLock && document.pointerLockElement !== canvas) { lock(); dragging = true; return; }
   dragging = true;
-  S.pad = false;
   if (e.button === 0) { primary(); S.hold = true; } else if (e.button === 2 && S.build) stopBuild();
 });
 addEventListener('mouseup', () => { dragging = false; S.hold = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-addEventListener('mousemove', e => { if (document.pointerLockElement === canvas || dragging) { cam.yaw -= e.movementX * .0026; cam.pitch = Math.min(1.35, Math.max(-.25, cam.pitch + e.movementY * .0022)); } });
+addEventListener('mousemove', e => { if (document.pointerLockElement === canvas || dragging) { const k = cfg.sens / 100; cam.yaw -= e.movementX * .0026 * k; cam.pitch = Math.min(1.35, Math.max(-.25, cam.pitch + e.movementY * .0022 * k * (cfg.invY ? -1 : 1))); } });
 addEventListener('wheel', e => { if (playing()) select(S.sel + (e.deltaY > 0 ? 1 : -1)); }, { passive: true });
 
 // ---------- actions ----------
@@ -228,9 +256,13 @@ function aimPoint() {      // what is under the crosshair: an animal, the ground
 function stations() { const out = new Set(); for (const s of S.structs.values()) { const st = STRUCTS[s.t].station; if (st && Math.hypot(s.x - me.x, s.z - me.z) < 7) out.add(st); } return out; }
 
 // ---------- building ----------
-function startBuild(t) { stopBuild(); S.build = { t, r: 0, lvl: 0, ghost: G.ghostOf({ t, d: {} }) }; scene.add(S.build.ghost); buildBar(); canvas.requestPointerLock?.()?.catch?.(() => { }); }
+function startBuild(t) { stopBuild(); S.build = { t, r: 0, lvl: 0, ghost: G.ghostOf({ t, d: {} }) }; scene.add(S.build.ghost); buildBar(); lock(); }
 function stopBuild() { if (!S.build) return; scene.remove(S.build.ghost); S.build = null; $('buildbar').hidden = true; }
-function buildBar() { const d = STRUCTS[S.build.t]; $('buildbar').hidden = false; $('buildbar').innerHTML = `${d.i} <b>${d.n}</b> &nbsp; <kbd>${S.pad ? 'RT' : 'Click'}</kbd>place <kbd>${S.pad ? 'X' : 'R'}</kbd>turn ${d.kind !== 'place' && d.kind !== 'foundation' ? `<kbd>${S.pad ? 'Y' : 'Z'}</kbd>floor ${S.build.lvl + 1} ` : ''}<kbd>${S.pad ? 'B' : 'Esc'}</kbd>done`; }
+function buildBar() {
+  if (!S.build) return; const d = STRUCTS[S.build.t], p = padUI(), hint = ui.costHint(d);
+  $('buildbar').hidden = false;
+  $('buildbar').innerHTML = `${d.i} <b>${d.n}</b> &nbsp; <kbd>${p ? 'RT' : 'Click'}</kbd>place <kbd>${p ? 'X' : 'R'}</kbd>turn ${d.kind !== 'place' && d.kind !== 'foundation' ? `<kbd>${p ? 'Y' : 'Z'}</kbd>floor ${S.build.lvl + 1} ` : ''}<kbd>${p ? 'B' : 'Esc'}</kbd>done<div class="need">Needs: ${ui.costHtml(d.cost)}</div>${hint ? `<div class="need hint">${hint}</div>` : ''}`;
+}
 function placement() {
   const b = S.build, d = STRUCTS[b.t], [fx, fz] = fwd(), reach = d.kind === 'place' ? 2.6 : 4.2 + cam.pitch * 2;
   const ax = me.x + fx * reach, az = me.z + fz * reach, cx = Math.round(ax / 4) * 4, cz = Math.round(az / 4) * 4;
@@ -257,7 +289,7 @@ function findTarget() {
   return best;
 }
 function promptFor(t) {
-  const def = heldDef(), K = k => `<kbd>${S.pad ? { E: 'X', Click: 'RT', K: 'R3' }[k] || k : k}</kbd>`;
+  const def = heldDef(), pu = padUI(), K = k => `<kbd>${pu ? { E: 'X', Click: 'RT', K: 'R3' }[k] || k : k}</kbd>`;
   if (S.fishing) return '🎣 Waiting for a bite…';
   if (!t) return nearWater() ? `${K('E')} Drink` : '';
   if (t.k === 'a') return `${ANIMALS[t.a.t].n} — ${K('Click')} attack`;
@@ -288,9 +320,9 @@ function drawMap(c) { const x = c.getContext('2d'); x.imageSmoothingEnabled = tr
 
 // ---------- gamepad ----------
 // Standard (Xbox-style) layout. In the world it drives the character; with a panel open it moves a highlight around the menu.
-const KEYS_KB = $('keys').innerHTML, KEYS_PAD = '<span><b>Y</b> Bag</span> <span><b>↑</b> Craft</span> <span><b>→</b> Build</span> <span><b>←</b> Clan</span> <span><b>↓</b> Map</span> <span><b>Start</b> Help</span>';
+const KEYS_KB = $('keys').innerHTML, KEYS_PAD = '<span><b>Y</b> Bag</span> <span><b>X</b> Use</span> <span><b>RT</b> Action</span> <span><b>A</b> Jump</span> <span><b>LB RB</b> Items</span> <span><b>↑</b> Craft</span> <span><b>→</b> Build</span> <span><b>←</b> Clan</span> <span><b>↓</b> Map</span> <span><b>Start</b> Menu</span>';
 let keysPad = false;
-const pad = { mx: 0, mz: 0, run: false, jump: false, rt: false, prev: [], seen: false, navT: 0, navHeld: false, el: null, pt: null };
+const pad = { lastT: -1e9, mx: 0, mz: 0, run: false, jump: false, rt: false, prev: [], seen: false, navT: 0, navHeld: false, el: null, pt: null };
 const dead = v => Math.abs(v) < .2 ? 0 : (v - Math.sign(v) * .2) / .8;
 const canRepeat = () => { const d = heldDef(); return !S.build && !ui.tab && !(d && (d.food || d.heal || d.armor || d.tool === 'water')); };
 const navEls = () => [...document.querySelectorAll('#pbody .slot, #pbody button:not(:disabled), #pbody .card:not(.off), #pbody input')];
@@ -313,7 +345,7 @@ function pollPad(dt) {
   const gp = [...(navigator.getGamepads?.() || [])].find(g => g && g.connected && g.buttons.length >= 12 && g.axes.length >= 4); if (!gp) return;
   const b = gp.buttons.map(x => x.pressed || x.value > .5), hit = i => b[i] && !pad.prev[i];
   const lx = dead(gp.axes[0]), ly = dead(gp.axes[1]), rx = dead(gp.axes[2]), ry = dead(gp.axes[3]);
-  if (b.some(Boolean) || lx || ly || rx || ry) { if (!S.pad && S.build) { S.pad = true; buildBar(); } S.pad = true; if (!pad.seen) { pad.seen = true; if (S.me) ui.toast('🎮 Controller ready — press Start for the button guide'); } }
+  if (b.some(Boolean) || lx || ly || rx || ry) { S.pad = true; pad.lastT = performance.now(); if (!pad.seen && S.me) { pad.seen = true; ui.toast('🎮 Controller ready — Y opens your bag, Start opens the menu'); } }
   if (!S.me) { if (hit(0) && $('lname').value.trim()) $('loginForm').requestSubmit(); pad.prev = b; return; }
   if (document.activeElement?.tagName === 'INPUT') { if (hit(1)) document.activeElement.blur(); pad.prev = b; return; }
   if (ui.tab) {
@@ -328,7 +360,7 @@ function pollPad(dt) {
     pad.prev = b; return;
   }
   pad.mx = lx; pad.mz = -ly; pad.jump = b[0]; pad.rt = b[7];
-  cam.yaw -= rx * 2.9 * dt; cam.pitch = Math.min(1.35, Math.max(-.25, cam.pitch + ry * 1.9 * dt));
+  const ls = cfg.padSens / 100; cam.yaw -= rx * 2.9 * ls * dt; cam.pitch = Math.min(1.35, Math.max(-.25, cam.pitch + ry * 1.9 * ls * dt * (cfg.invY ? -1 : 1)));
   if (hit(10)) pad.run = true; if (Math.hypot(lx, ly) < .3) pad.run = false;
   if (hit(7)) primary();
   if (hit(2)) { if (S.build) S.build.r = (S.build.r + 1) % 4; else interact(); }
@@ -337,7 +369,7 @@ function pollPad(dt) {
   if (hit(6)) { S.sneak = !S.sneak; ui.toast(S.sneak ? 'Sneaking…' : 'Standing up'); }
   if (hit(4)) select(S.sel - 1); if (hit(5)) select(S.sel + 1);
   if (hit(11) && S.target?.k === 's' && heldDef()?.tool === 'hammer') emit('demolish', { id: S.target.s.id });
-  const open = hit(12) ? 'craft' : hit(15) ? 'build' : hit(14) ? 'clan' : hit(13) || hit(8) ? 'map' : hit(9) ? 'help' : null;
+  const open = hit(12) ? 'craft' : hit(15) ? 'build' : hit(14) ? 'clan' : hit(13) || hit(8) ? 'map' : hit(9) ? 'menu' : null;
   if (open) { if (S.build) stopBuild(); pad.el = pad.pt = null; ui.open(open); }
   pad.prev = b;
 }
@@ -391,7 +423,7 @@ function updateCamera(dt, focus) {
 function frame() {
   requestAnimationFrame(frame);
   const raw = clock.getDelta(), dt = Math.min(.05, raw); time += dt; fpsWatch(raw);
-  let focus; pollPad(raw); if (keysPad !== !!S.pad) { keysPad = !!S.pad; $('keys').innerHTML = keysPad ? KEYS_PAD : KEYS_KB; }
+  let focus; pollPad(raw); if (keysPad !== padUI()) { keysPad = padUI(); $('keys').innerHTML = keysPad ? KEYS_PAD : KEYS_KB; $('keys').classList.toggle('pad', keysPad); buildBar(); }
   if (S.me) {
     if ((S.hold || pad.rt) && canRepeat()) primary();
     updateMe(dt); focus = me.char.position;
@@ -420,4 +452,4 @@ function frame() {
   renderer.render(scene, camera);
 }
 frame();
-window.KW = { me, cam, S, primary, interact, startBuild, placement, select, ui };
+window.KW = { me, cam, S, primary, interact, startBuild, placement, select, ui, cfg };

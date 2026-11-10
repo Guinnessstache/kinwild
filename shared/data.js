@@ -15,6 +15,10 @@ export const SKILLS = {
   building: { n: 'Building', i: '🏠', d: 'New building pieces' },
 };
 
+// Small drawn icons where no emoji fits. Icons are only ever inserted as HTML.
+const SVG = b => `<svg class="svgi" viewBox="0 0 24 24" width="1em" height="1em">${b}</svg>`;
+const IC_HOE = SVG('<path d="M4.5 21.5 16 6" stroke="#8a5a33" stroke-width="2.6" stroke-linecap="round"/><path d="M13.2 3.2 20.8 8.8 21.6 15.2 17.2 13.6 15.6 9.2 11.6 6z" fill="#c3cad1" stroke="#59616a" stroke-width="1.1" stroke-linejoin="round"/>');
+const IC_WOODWALL = SVG('<rect x="2" y="3.5" width="20" height="17" rx="1.5" fill="#b9814f" stroke="#5e3d22" stroke-width="1.4"/><path d="M7 3.5v17M12 3.5v17M17 3.5v17" stroke="#5e3d22" stroke-width="1.2"/><path d="M2.5 8.5h19M2.5 15.5h19" stroke="#8a5a33" stroke-width="1.6"/>');
 const T = (n, i, tool, pow, dmg, dur, reach = 3) => ({ n, i, tool, pow, dmg, dur, reach });
 const F = (n, i, h, t = 0, hp = 0, cooked = false) => ({ n, i, food: { h, t, hp }, cooked });
 export const ITEMS = {
@@ -40,7 +44,7 @@ export const ITEMS = {
   // tools & weapons
   stone_axe: T('Stone Axe', '🪓', 'axe', 2, 3, 70), stone_pickaxe: T('Stone Pickaxe', '⛏️', 'pickaxe', 2, 2, 70),
   iron_axe: T('Iron Axe', '🪓', 'axe', 4, 5, 220), iron_pickaxe: T('Iron Pickaxe', '⛏️', 'pickaxe', 4, 4, 220),
-  hammer: T('Building Hammer', '🔨', 'hammer', 0, 2, 400), hoe: T('Hoe', '🥍', 'hoe', 0, 2, 120),
+  hammer: T('Building Hammer', '🔨', 'hammer', 0, 2, 400), hoe: T('Hoe', IC_HOE, 'hoe', 0, 2, 120),
   stone_spear: T('Stone Spear', '🔱', 'spear', 0, 6, 60, 3.8), iron_sword: T('Iron Sword', '🗡️', 'sword', 0, 11, 200, 3.2),
   bow: T('Bow', '🏹', 'bow', 0, 8, 120), arrow: { n: 'Arrow', i: '➶' },
   fishing_rod: T('Fishing Rod', '🎣', 'rod', 0, 1, 60), torch: T('Torch', '🔥', 'torch', 0, 2, 300),
@@ -126,7 +130,7 @@ export const STRUCTS = {
   farm_plot: B('Farm Plot', '🌱', 'Farm', 'place', { fiber: 2 }, 1, { needs: 'hoe', flat: true }),
   fence: B('Fence', '🚧', 'Farm', 'wall', { stick: 4 }, 1, { h: 1.2 }),
   wood_foundation: B('Wood Foundation', '🟫', 'Building', 'foundation', { wood: 6 }),
-  wood_wall: B('Wood Wall', '🧱', 'Building', 'wall', { plank: 4 }, 1, { h: 3 }),
+  wood_wall: B('Wood Wall', IC_WOODWALL, 'Building', 'wall', { plank: 4 }, 1, { h: 3 }),
   wood_doorway: B('Wood Door', '🚪', 'Building', 'wall', { plank: 5 }, 1, { h: 3, door: true }),
   wood_window: B('Wood Window', '🪟', 'Building', 'wall', { plank: 3 }, 2, { h: 3 }),
   wood_floor: B('Wood Ceiling / Upper Floor', '⬛', 'Building', 'floor', { plank: 4 }, 2),

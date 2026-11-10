@@ -58,7 +58,13 @@ input:focus { outline: none; border-color: var(--gold); }
 .slot.sel { border-color: var(--gold); box-shadow: 0 0 12px rgba(240,184,74,.7); transform: translateY(-4px); } .slot.pick { border-color: #fff; background: rgba(120,90,50,.9); }
 .slot.hb { border-color: #c08a3e; background: rgba(74,52,28,.9); }
 #hud > #hotbar { z-index: 12; }
-#buildbar { left: 50%; bottom: 96px; transform: translateX(-50%); background: var(--bg); border: 2px solid var(--good); border-radius: 12px; padding: 6px 14px; font-weight: 700; white-space: nowrap; }
+#buildbar { left: 50%; bottom: 96px; transform: translateX(-50%); background: var(--bg); border: 2px solid var(--good); border-radius: 12px; padding: 6px 14px; font-weight: 700; white-space: nowrap; text-align: center; }
+#buildbar .need { margin-top: 4px; font-size: 14px; } #buildbar .hint { color: #ffd98a; font-weight: 400; }
+.svgi { vertical-align: -.14em; }
+.card.can { border-color: #6fae52; } .card .cost { clear: none; } .card .ing { display: block; margin: 0; } .card .hint { display: block; clear: both; color: #ffd98a; margin-top: 3px; }
+.menu { max-width: 620px; margin: 0 auto; } .menu .big { width: 100%; font-size: 19px; padding: 10px; margin-bottom: 14px; }
+.mrow { display: grid; grid-template-columns: 190px 1fr; align-items: center; gap: 10px; padding: 7px 10px; background: rgba(0,0,0,.22); border-radius: 10px; margin-bottom: 5px; } .mrow span { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .mrow .val { min-width: 62px; justify-content: center; font-weight: 700; } .mrow small { color: var(--dim); }
+#keys.pad { width: 232px; }
 #chat { left: 16px; bottom: 14px; width: 330px; }
 #chatlog { max-height: 150px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; text-shadow: 0 1px 2px #000; font-size: 14px; }
 #chatlog div { background: rgba(20,14,8,.45); border-radius: 6px; padding: 1px 7px; margin-top: 2px; width: fit-content; max-width: 100%; word-break: break-word; }

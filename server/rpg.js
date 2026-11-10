@@ -17,9 +17,10 @@ const methods = {
   // Crafted and looted gear gets a random quality and stats. Crafting level (or a tough monster) nudges the roll up.
   roll(id, luck = 0, durMul = 1) {
     const def = ITEMS[id], r = Math.random() - luck, q = r < .04 ? 3 : r < .17 ? 2 : r < .45 ? 1 : 0, qm = [1, 1.15, 1.3, 1.5][q], st = {};
-    for (const k in def.base) { const v = def.base[k] * qm * (.9 + Math.random() * .2); st[k] = k === 'dmg' ? Math.round(v * 10) / 10 : Math.max(1, Math.round(v)); }
+    // base stats swing from -22% to +28%, and a roll can add bonus stats (one per quality step, plus a coin-flip extra)
+    for (const k in def.base) { const v = def.base[k] * qm * (.78 + Math.random() * .5); st[k] = k === 'dmg' ? Math.round(v * 10) / 10 : Math.max(1, Math.round(v)); }
     const pool = def.slot ? ['hp', 'pow', 'mend', 'arm'] : ['hp', 'pow', 'mend'], amt = { hp: 6, pow: 3, mend: 3, arm: 2 }, tm = def.tr === 2 ? 1.6 : 1;
-    for (let i = 0; i < q; i++) { const k = pool[Math.floor(Math.random() * pool.length)]; st[k] = (st[k] || 0) + Math.max(1, Math.round(amt[k] * tm * (.7 + Math.random() * .6))); }
+    for (let i = 0; i < q + (Math.random() < .5 ? 1 : 0); i++) { const k = pool[Math.floor(Math.random() * pool.length)]; st[k] = (st[k] || 0) + Math.max(1, Math.round(amt[k] * tm * (.7 + Math.random() * .6))); }
     const it = { id, n: 1, q, st }; if (def.dur) it.d = Math.round(def.dur * durMul * qm); return it;
   },
   dmgOf(p) {       // [damage, skill] for the held item

@@ -432,7 +432,7 @@ export class Game {
     const def = STRUCTS[d.t]; if (!def) return;
     if ([d.x, d.y, d.z].some(v => typeof v !== 'number' || !isFinite(v))) return;
     const x = r2(d.x), y = r2(d.y), z = r2(d.z), r = (d.r | 0) & 3;
-    if (Math.hypot(x - p.x, z - p.z) > 16 || Math.abs(y - heightAt(x, z)) > 16 || Math.abs(x) > 300 || Math.abs(z) > 300) return { err: 'Too far away' };
+    if (Math.hypot(x - p.x, z - p.z) > 45 || Math.abs(y - heightAt(x, z)) > 16 || Math.abs(x) > 300 || Math.abs(z) > 300) return { err: 'Too far away' };
     if (heightAt(x, z) < 0.2 && def.kind !== 'foundation') { /* building over water needs a foundation under it */ if (y < 0.5) return { err: 'Too wet here — put a foundation down first' }; }
     if (this.lvl(p, 'building') < def.lvl) return { err: `Needs Building level ${def.lvl}` };
     if (def.needs ? !this.count(p, def.needs) : (!def.free && !this.count(p, 'hammer'))) return { err: def.needs ? 'You need a Hoe for that' : 'You need a Building Hammer (craft one with C)' };

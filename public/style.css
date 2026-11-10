@@ -115,3 +115,5 @@ h3 { margin: 0 0 8px; color: var(--gold); font: 700 17px Georgia, serif; } h3 sm
 
 .slot[draggable="true"] { cursor: grab; }
 .gpfocus { outline: 3px solid #fff !important; outline-offset: 2px; box-shadow: 0 0 14px rgba(255,255,255,.75) !important; }
+
+.slot .ic .svgi, .card .ic .svgi, .rec .ic .svgi { width: 1.2em; height: 1.2em; }

@@ -110,16 +110,20 @@ export function createUI(S, act) {
     let h = box ? `<h3>${bd.i} ${bd.n} storage · tier ${box.tier || 1} <small>right-click takes an item out</small></h3>
       <div class="row"><button class="small" data-act="tab" data-t="bag">Open with my bag to put things in</button><button class="small" data-act="stackNear">⇣ Stack matching items from my bag</button>${up ? `<button class="small" data-act="upgrade">⬆ Upgrade to tier ${(box.tier || 1) + 1}: ${Object.entries(up).map(([k, n]) => `${ITEMS[k].i}${n}`).join(' ')}</button>` : ''}</div>
       <div class="grid">${box.inv.map((it, i) => slot(it, 1, i)).join('')}</div>` : '';
-    h += `<p style="margin:0 0 8px;color:var(--dim)">Ingredients are taken from your bag first, then from your chests and stations within a few steps.</p>`;
-    for (const st of [null, 'workbench', 'campfire', 'furnace', 'anvil', 'loom']) {
+    // At a station you see that station's recipes; anywhere else only the hand-made basics plus any station you are standing at.
+    const at = box ? STRUCTS[box.t].station : null, all = Object.keys(STATION_NAMES);
+    const show = at ? [at, null] : [null, ...all.filter(st => near[st])], away = at ? [] : all.filter(st => !near[st]);
+    h += `<p style="margin:0 0 8px;color:var(--dim)">Ingredients come from your bag first, then from your chests and stations within a few steps.</p>`;
+    for (const st of show) {
       const tier = st ? near[st] || 0 : 9;
-      h += `<h3>${st ? STATION_NAMES[st] : '✋ By hand'} <small>${st ? (tier ? `✔ nearby (tier ${tier})` : `stand next to a ${STATION_NAMES[st]} (build one with B)`) : 'anywhere'}</small></h3>`;
+      h += `<h3>${st ? `${STRUCTS[st].i} ${STATION_NAMES[st]}` : '✋ By hand'} <small>${st ? `tier ${tier}` : 'anywhere'}</small></h3>`;
       for (const r of RECIPES.filter(r => r.station === st)) {
         const d = ITEMS[r.out], lv = S.me.skills[r.sk].l >= r.lvl, known = !r.learn || S.me.known?.[r.id], tok = tier >= (r.tier || 1), has = Object.entries(r.in).every(([k, n]) => have(k) >= n), ok = tier && tok && lv && has && known;
         const lock = !known ? '📜 Recipe scroll needed (monster loot)' : !lv ? `🔒 ${SKILLS[r.sk].n} Lv ${r.lvl}` : tier && !tok ? `⬆ needs a tier ${r.tier} ${STATION_NAMES[st]}` : '';
         h += `<div class="rec ${ok ? '' : 'off'}"><span class="ic">${d.i}</span><div><b>${esc(d.n)}${r.n > 1 ? ` ×${r.n}` : ''}</b> ${lock ? `<small>${lock}</small>` : d.gear ? '<small>random quality and stats</small>' : d.buff ? `<small>${buffLine(d.buff)}</small>` : ''}<br>${Object.entries(r.in).map(([k, n]) => `<span class="ing ${have(k) >= n ? 'ok' : 'no'}">${ITEMS[k].i} ${ITEMS[k].n} ${have(k)}/${n}</span>`).join('')}</div><div><button data-act="craft" data-id="${r.id}" data-n="1" ${ok ? '' : 'disabled'}>Make</button> <button class="small" data-act="craft" data-id="${r.id}" data-n="5" ${ok ? '' : 'disabled'}>×5</button></div></div>`;
       }
     }
+    if (away.length) h += `<h3>🔨 Other stations</h3><p style="margin:0;color:var(--dim)">${away.map(st => `${STRUCTS[st].i} ${STATION_NAMES[st]} (${RECIPES.filter(r => r.station === st).length} recipes)`).join(' · ')}<br>Walk up to one and press ${act.padUI() ? 'X' : 'E'} to see and make what it can build. Build stations from the Build menu (${act.padUI() ? 'D-pad →' : 'B'}).</p>`;
     return h;
   }
   function who() {

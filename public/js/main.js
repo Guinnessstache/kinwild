@@ -350,10 +350,10 @@ function stations() { const out = {}; for (const s of S.structs.values()) { cons
 function startBuild(t) { stopBuild(); S.build = { t, r: 0, lvl: 0, ghost: G.ghostOf({ t, d: {} }) }; scene.add(S.build.ghost); buildBar(); lock(); }
 function stopBuild() { if (!S.build) return; scene.remove(S.build.ghost); S.build = null; S.fly = null; $('buildbar').hidden = true; }
 // Free camera for building: the view leaves the character and flies around so you can see roofs and tight corners.
-function toggleFly() { S.fly = S.fly ? null : { x: camera.position.x, y: camera.position.y, z: camera.position.z }; buildBar(); if (S.fly) ui.toast('Free camera: move with WASD, Space up, Shift down. V returns to your character.'); }
+function toggleFly() { S.fly = S.fly ? null : { x: camera.position.x, y: camera.position.y, z: camera.position.z }; buildBar(); if (S.fly) ui.toast(padUI() ? 'Free camera: left stick fly, A up, LT down, L3 faster. R3 returns to your character.' : 'Free camera: WASD fly, Space up, Shift down, Ctrl faster. V returns to your character.'); }
 function flyAim(py) {        // where the middle of the screen meets the level being built on
   const d = new THREE.Vector3(); camera.getWorldDirection(d); const o = camera.position;
-  const t = d.y < -.05 ? Math.min(14, (py - o.y) / d.y) : 5; return [o.x + d.x * Math.max(1, t), o.z + d.z * Math.max(1, t)];
+  const t = d.y < -.05 ? Math.min(60, (py - o.y) / d.y) : 8; return [o.x + d.x * Math.max(1, t), o.z + d.z * Math.max(1, t)];
 }
 function buildBar() {
   if (!S.build) return; const d = STRUCTS[S.build.t], p = padUI(), hint = ui.costHint(d);
@@ -480,7 +480,7 @@ function navMove(dx, dy) {
 }
 function cycleTab(dir) { const t = [...document.querySelectorAll('#tabs button')], i = t.findIndex(b => b.classList.contains('on')); t[(i + dir + t.length) % t.length]?.click(); pad.el = pad.pt = null; }
 function pollPad(dt) {
-  pad.mx = pad.mz = 0; pad.jump = pad.rt = false;
+  pad.mx = pad.mz = 0; pad.jump = pad.rt = pad.down = false;
   const gp = [...(navigator.getGamepads?.() || [])].find(g => g && g.connected && g.buttons.length >= 12 && g.axes.length >= 4); if (!gp) return;
   const b = gp.buttons.map(x => x.pressed || x.value > .5), hit = i => b[i] && !pad.prev[i];
   const lx = dead(gp.axes[0]), ly = dead(gp.axes[1]), rx = dead(gp.axes[2]), ry = dead(gp.axes[3]);
@@ -499,14 +499,14 @@ function pollPad(dt) {
     if (hit(1) || hit(3) || hit(9)) { ui.close(); pad.el = pad.pt = null; }
     pad.prev = b; return;
   }
-  pad.mx = lx; pad.mz = -ly; pad.jump = b[0]; pad.rt = b[7];
-  const ls = cfg.padSens / 100; cam.yaw -= rx * 2.9 * ls * dt; cam.pitch = Math.min(1.35, Math.max(-.25, cam.pitch + ry * 1.9 * ls * dt * (cfg.invY ? -1 : 1)));
+  pad.mx = lx; pad.mz = -ly; pad.jump = b[0]; pad.rt = b[7]; pad.down = b[6];
+  const ls = cfg.padSens / 100; cam.yaw -= rx * 2.9 * ls * dt; cam.pitch = Math.min(S.fly ? 1.5 : 1.35, Math.max(S.fly ? -1.2 : -.25, cam.pitch + ry * 1.9 * ls * dt * (cfg.invY ? -1 : 1)));
   if (hit(10)) pad.run = true; if (Math.hypot(lx, ly) < .3) pad.run = false;
   if (hit(7)) primary();
   if (hit(2)) { if (S.build) { S.build.r = (S.build.r + 1) % 4; S.build.turned = true; } else interact(); }
   if (hit(3)) { if (S.build) { S.build.lvl = (S.build.lvl + 1) % 3; buildBar(); } else ui.open('bag'); }
   if (hit(1)) { if (S.build) stopBuild(); else if (heldDef()?.tool === 'hammer') nextPiece(); else ability(); }
-  if (hit(6)) { S.sneak = !S.sneak; ui.toast(S.sneak ? 'Sneaking…' : 'Standing up'); }
+  if (hit(6) && !S.fly) { S.sneak = !S.sneak; ui.toast(S.sneak ? 'Sneaking…' : 'Standing up'); }
   if (hit(4)) select(S.sel - 1); if (hit(5)) select(S.sel + 1);
   if (hit(11)) { if (S.build) toggleFly(); else if (S.target?.k === 's' && heldDef()?.tool === 'hammer') emit('demolish', { id: S.target.s.id }); }
   if (hit(8)) oskOpen($('chatin'), ui.sendChat);
@@ -608,12 +608,14 @@ function updateMe(dt) {
   G.setHeld(me.char, held()?.id || null, heldDef()); G.animateCharacter(me.char, dt, me.speed, me.mode);
   if (S.fishing && me.speed > 1) S.fishing = false;
 }
-function updateFly(dt) {       // free build camera: fly around near the character
-  const k = S.keys, f = S.fly, sp = 9 * dt, [fx, fz] = fwd(), typing = document.activeElement?.tagName === 'INPUT' || ui.tab;
-  const ix = typing ? 0 : (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0) + pad.mx, iz = typing ? 0 : (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0) + pad.mz, iy = typing ? 0 : (k.Space || pad.jump ? 1 : 0) - (k.ShiftLeft || k.ShiftRight ? 1 : 0);
+// free build camera: fly anywhere within 40 m of the character and up to 35 m above, to look over a whole house
+const FLY_R = 40, FLY_UP = 35;
+function updateFly(dt) {
+  const k = S.keys, f = S.fly, sp = (k.ControlLeft || pad.run ? 26 : 13) * dt, [fx, fz] = fwd(), typing = document.activeElement?.tagName === 'INPUT' || ui.tab;
+  const ix = typing ? 0 : (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0) + pad.mx, iz = typing ? 0 : (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0) + pad.mz, iy = typing ? 0 : (k.Space || pad.jump ? 1 : 0) - (k.ShiftLeft || k.ShiftRight || pad.down ? 1 : 0);
   f.x += (fx * iz - fz * ix) * sp; f.z += (fz * iz + fx * ix) * sp; f.y += iy * sp;
-  const dx = f.x - me.x, dz = f.z - me.z, d = Math.hypot(dx, dz); if (d > 13) { f.x = me.x + dx / d * 13; f.z = me.z + dz / d * 13; }
-  f.y = Math.min(me.y + 16, Math.max(Math.max(heightAt(f.x, f.z), 0) + .6, f.y));
+  const dx = f.x - me.x, dz = f.z - me.z, d = Math.hypot(dx, dz); if (d > FLY_R) { f.x = me.x + dx / d * FLY_R; f.z = me.z + dz / d * FLY_R; }
+  f.y = Math.min(me.y + FLY_UP, Math.max(Math.max(heightAt(f.x, f.z), 0) + .6, f.y));
   const cp = Math.cos(cam.pitch); camera.position.set(f.x, f.y, f.z); camera.lookAt(f.x - Math.sin(cam.yaw) * cp, f.y - Math.sin(cam.pitch), f.z - Math.cos(cam.yaw) * cp); me.char.visible = true;
 }
 function updateCamera(dt, focus) {

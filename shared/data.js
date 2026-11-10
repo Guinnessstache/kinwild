@@ -28,7 +28,21 @@ const T = (n, i, tool, pow, dmg, dur, reach = 3) => ({ n, i, tool, pow, dmg, dur
 const F = (n, i, h, t = 0, hp = 0, cooked = false) => ({ n, i, food: { h, t, hp }, cooked });
 // Armor comes in three materials: cloth (healing), leather (damage), plate (armor and health). tr = tier.
 const ARM = { cloth: { arm: 2, mend: 6 }, leather: { arm: 4, pow: 4 }, plate: { arm: 8, hp: 12 } };
-const A = (n, i, slot, mat, tr = 1) => { const m = (slot === 'chest' ? 1.5 : 1) * (tr === 2 ? 1.8 : 1), base = {}; for (const k in ARM[mat]) base[k] = Math.round(ARM[mat][k] * m); return { n, i, slot, mat, tr, gear: true, base }; };
+// drawn armor icons: one shape per slot and material, coloured by tier
+const AC = { cloth: ['#8f7cc8', '#c9b8ff'], leather: ['#9a6235', '#5e3a20'], plate: ['#aeb6bf', '#e3e9ef'] }, OUT = 'stroke="#2a1d12" stroke-width="1.3" stroke-linejoin="round"';
+const SHAPE = {
+  head: { cloth: c => `<path d="M12 2.5 4.5 15.5c0 3 3.4 5.5 7.5 5.5s7.5-2.5 7.5-5.5z" fill="${c}" ${OUT}/><path d="M8 15.5c0-2.5 1.8-4.5 4-4.5s4 2 4 4.5" fill="#3a2a1e"/><path d="M7.5 15.5c0 2.6 2 4.2 4.5 4.2s4.5-1.6 4.5-4.2" fill="#f1c7a0" opacity=".85"/>`,
+    leather: c => `<path d="M3.5 14.5c0-5.5 3.8-9.5 8.5-9.5s8.5 4 8.5 9.5z" fill="${c}" ${OUT}/><path d="M12 5v9.5" stroke="#2a1d12" stroke-width="1"/><path d="M2 14.5h20v2.2H2z" fill="${c}" ${OUT}/>`,
+    plate: c => `<path d="M4 13c0-5.5 3.6-9.5 8-9.5s8 4 8 9.5v6.5H4z" fill="${c}" ${OUT}/><path d="M7 11.5h10v2.2H7z" fill="#2a1d12"/><path d="M12 3.5v8" stroke="#2a1d12" stroke-width="1.2"/><path d="M11 13.7h2v5.8h-2z" fill="#2a1d12" opacity=".55"/>` },
+  chest: { cloth: c => `<path d="M8 3 4 6.5 2.5 12l3 1.2L7 9v12.5h10V9l1.5 4.2 3-1.2L20 6.5 16 3l-4 3z" fill="${c}" ${OUT}/><path d="M12 6v15.5" stroke="#2a1d12" stroke-width="1"/><path d="M7 14h10" stroke="#e8c84a" stroke-width="1.6"/>`,
+    leather: c => `<path d="M7.5 3 3.5 6.5 5 11l2.5-.8V21h9V10.2l2.5.8 1.5-4.5L16.5 3h-2.5c0 1.5-1 2.6-2 2.6S10 4.5 10 3z" fill="${c}" ${OUT}/><path d="M7.5 14.5h9" stroke="#2a1d12" stroke-width="1.6"/><circle cx="12" cy="14.5" r="1.2" fill="#d9b23a"/><path d="M12 6v6.5M10.5 8.5h3M10.5 10.5h3" stroke="#2a1d12" stroke-width=".9"/>`,
+    plate: c => `<path d="M5 4.5 2.8 9l2.8 1.2.4 8.3 6 2.5 6-2.5.4-8.3L21.2 9 19 4.5 15 3.2c-.6 1.5-1.7 2.3-3 2.3s-2.4-.8-3-2.3z" fill="${c}" ${OUT}/><path d="M12 5.5v15.2M7 11.5c3 1.2 7 1.2 10 0" stroke="#2a1d12" stroke-width="1.1" fill="none"/>` },
+  legs: { cloth: c => `<path d="M6 3h12l1.5 18h-5L12 10l-2.5 11h-5z" fill="${c}" ${OUT}/><path d="M6 5.5h12" stroke="#e8c84a" stroke-width="1.6"/>`,
+    leather: c => `<path d="M6.5 3h11l1 18h-4.6L12 10.5 10.1 21H5.5z" fill="${c}" ${OUT}/><path d="M6.5 5.5h11" stroke="#2a1d12" stroke-width="1.6"/><path d="M8.2 13.5h2.2M14.3 13.5h1.8" stroke="#2a1d12" stroke-width=".9"/>`,
+    plate: c => `<path d="M6.5 3h11l.8 9.5-1 8.5h-4l-1.3-9-1.3 9H6.7l-1-8.5z" fill="${c}" ${OUT}/><path d="M6 12.5h4.6M13.4 12.5H18" stroke="#2a1d12" stroke-width="1.2"/><circle cx="8.3" cy="12.5" r="1.4" fill="${c}" ${OUT}/><circle cx="15.7" cy="12.5" r="1.4" fill="${c}" ${OUT}/>` },
+};
+const armIcon = (slot, mat, tr) => SVG(SHAPE[slot][mat](AC[mat][tr - 1]));
+const A = (n, i, slot, mat, tr = 1) => { const m = (slot === 'chest' ? 1.5 : 1) * (tr === 2 ? 1.8 : 1), base = {}; for (const k in ARM[mat]) base[k] = Math.round(ARM[mat][k] * m); return { n, i: armIcon(slot, mat, tr), slot, mat, tr, gear: true, base }; };
 const BUFF = (it, st, t) => ({ ...it, buff: { st, t } });
 export const ITEMS = {
   // materials

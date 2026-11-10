@@ -60,6 +60,13 @@ Each player picks a name and a PIN. Same name + PIN brings the character back on
 
 The "Next step" box walks new players through 19 steps from punching a tree to forging iron.
 
+## Build 7 changes
+
+- The craft tab shows hand-made basics anywhere; each station's recipes show only when you are at that station (press E on it).
+- Drawn icons for every armor piece (cloth, leather and plate, per slot, lighter for tier 2).
+- Wider random stat rolls on crafted and looted gear (base stats -22% to +28%, plus a 50% chance of a bonus stat on top of quality bonuses).
+- Free build camera flies up to 40 m out and 35 m up (Ctrl or L3 for double speed), and you can place pieces anywhere you can see within 45 m.
+
 ## Build 6 additions
 
 - **Classes** follow the weapon in hand: sword = Guardian (tank, Taunt), spear = Striker (melee damage, Power Strike), bow = Ranger (ranged damage, Aimed Shot), staff = Mender (healer; left click heals the most hurt player nearby, Group Heal). Ability on Q (controller B). Four combat skills: Melee, Archery, Defense, Healing.

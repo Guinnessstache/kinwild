@@ -134,7 +134,7 @@ export function createUI(S, act) {
     <p><kbd>Left click</kbd> use what you hold: swing, chop, mine, shoot, fish, eat, plant</p>
     <p><kbd>E</kbd> pick things up, open chests and doors, drink, harvest, use stations</p>
     <p><kbd>Tab</kbd> bag & skills · <kbd>C</kbd> craft · <kbd>B</kbd> build · <kbd>G</kbd> clan · <kbd>M</kbd> map · <kbd>Esc</kbd> menu & settings · <kbd>Enter</kbd> chat</p>
-    <p><kbd>K</kbd> with the hammer in hand: take apart what you're looking at (you get half the materials back)</p>
+    <p><kbd>K</kbd> with the hammer in hand: take apart the highlighted piece (half the materials back). Roofs, stairs and floors are offered before the foundation under them; <kbd>T</kbd> steps to the next piece in reach</p>
     <p><b>🎮 Controller:</b> <kbd>Left stick</kbd> move · <kbd>Right stick</kbd> look · <kbd>A</kbd> jump · <kbd>X</kbd> pick up / use · <kbd>RT</kbd> use held item (hold to keep going) · <kbd>LB</kbd> <kbd>RB</kbd> action bar · <kbd>L3</kbd> run · <kbd>LT</kbd> sneak · <kbd>Y</kbd> bag · <kbd>D-pad</kbd> ↑ craft, → build, ← clan, ↓ map · <kbd>Start</kbd> menu · <kbd>R3</kbd> take apart (hammer)</p>
     <p><b>🎮 In menus:</b> <kbd>D-pad</kbd>/<kbd>stick</kbd> move the highlight · <kbd>A</kbd> choose (pick an item, then A on another slot moves it) · <kbd>X</kbd> eat / wear / quick-move · <kbd>LB</kbd> <kbd>RB</kbd> switch tab · <kbd>B</kbd> close. Building: <kbd>RT</kbd> place · <kbd>X</kbd> turn · <kbd>Y</kbd> floor · <kbd>B</kbd> done. Typing a name or chat still needs a keyboard.</p>
     <p><b>Getting started:</b> punch trees for sticks, grab loose stones and tall grass, then craft a Stone Axe. Follow the “Next step” box — it walks you through everything.</p>
@@ -153,7 +153,8 @@ export function createUI(S, act) {
     return `<div class="menu"><button data-act="resume" class="big">▶ Back to game</button>
       <h3>Settings</h3>
       ${row('Graphics', `<button data-act="gfx">${localStorage.kwGfx === 'low' ? 'Fast' : 'Pretty'}</button> <small>Fast turns shadows off for slower computers</small>`)}
-      ${row('Sound volume', step('vol', c.mute ? 'Muted' : c.vol + '%') + ` <button class="small" data-act="cfg" data-k="mute">${c.mute ? 'Unmute' : 'Mute'}</button>`)}
+      ${row('Music volume', step('music', c.mute ? 'Muted' : c.music ? c.music + '%' : 'Off'))}
+      ${row('Sound effects', step('vol', c.mute ? 'Muted' : c.vol + '%') + ` <button class="small" data-act="cfg" data-k="mute">${c.mute ? 'Unmute all' : 'Mute all'}</button>`)}
       ${row('Mouse look speed', step('sens', c.sens + '%'))}
       ${row('Controller look speed', step('padSens', c.padSens + '%'))}
       ${row('Look up / down', `<button data-act="cfg" data-k="invY">${c.invY ? 'Inverted' : 'Normal'}</button>`)}

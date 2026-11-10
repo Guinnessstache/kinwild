@@ -50,7 +50,7 @@ Each player picks a name and a PIN. Same name + PIN brings the character back on
 | Tab / C / B / G / M / H | Bag and skills / Craft / Build / Clan / Map / Help |
 | X | Sneak (animals notice you from half as far) |
 | R / Z | In build mode: turn the piece / change floor level |
-| K | With the hammer held: take apart what you are looking at (half the materials back) |
+| K / T | With the hammer held: K takes apart the highlighted piece (half the materials back), T steps to the next piece in reach |
 | Enter | Chat. `/c hello` talks to your clan only |
 | Esc | Menu: graphics, sound volume, look speed, button hints, log out |
 

@@ -29,20 +29,75 @@ function nodesNear(x, z, fn) { for (let i = -1; i <= 1; i++) for (let j = -1; j 
 
 // ---------- audio (tiny synth, no files) ----------
 // ---------- settings (kept in this browser) ----------
-const cfg = { vol: 70, mute: false, sens: 100, padSens: 100, invY: false, hints: 'auto' };
+const cfg = { vol: 70, music: 50, mute: false, sens: 100, padSens: 100, invY: false, hints: 'auto' };
 try { Object.assign(cfg, JSON.parse(localStorage.kwCfg || '{}')); } catch { }
 function setCfg(k, d) {
   if (k === 'mute' || k === 'invY') cfg[k] = !cfg[k];
   else if (k === 'hints') cfg.hints = { auto: 'kb', kb: 'pad', pad: 'auto' }[cfg.hints] || 'auto';
-  else if (k === 'vol') { cfg.vol = Math.max(0, Math.min(100, cfg.vol + d * 10)); cfg.mute = false; }
+  else if (k === 'vol' || k === 'music') { cfg[k] = Math.max(0, Math.min(100, cfg[k] + d * 10)); cfg.mute = false; }
   else cfg[k] = Math.max(20, Math.min(300, cfg[k] + d * 20));
   try { localStorage.kwCfg = JSON.stringify(cfg); } catch { }
   if (k === 'vol' || k === 'mute') sound('pick');
+  music.vol();
 }
 const padUI = () => cfg.hints === 'pad' || (cfg.hints === 'auto' && !!S.pad);     // show controller button names?
 function logout() { try { localStorage.removeItem('kwToken'); } catch { } sock.disconnect(); location.href = location.pathname; }
 
 let ac; function beep(f, d = .08, type = 'triangle', v = .06, slide = 0) { v *= cfg.mute ? 0 : cfg.vol / 70; if (v <= 0) return; try { ac ||= new AudioContext(); const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.value = f; if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), ac.currentTime + d); g.gain.value = v; g.gain.exponentialRampToValueAtTime(.0001, ac.currentTime + d); o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime + d); } catch { } }
+// ---------- music: a small generated folk tune (no audio files) ----------
+// Plucked melody over bass, arpeggio and a soft pad. Phrases go A A B A, then a short rest; calmer and slower at night.
+const music = (() => {
+  let out, wet, next = 0, step = 0, started = false, phrases = null, loops = 0, night = false, last = 76;
+  const PENT = [0, 2, 4, 7, 9], hz = m => 440 * Math.pow(2, (m - 69) / 12), R = () => Math.random();
+  const PROG = { day: [[60, 64, 67], [57, 60, 64], [53, 57, 60], [55, 59, 62]], night: [[57, 60, 64], [53, 57, 60], [60, 64, 67], [52, 55, 59]] };
+  const RHY = [[0, 2, 4, 6], [0, 3, 4, 6], [0, 2, 3, 4, 6], [0, 4, 6], [0, 2, 4, 5, 6], [0, 4]];
+  const scale = []; for (let o = 5; o <= 7; o++) for (const p of PENT) scale.push(o * 12 + p);      // C major pentatonic, C4..A6
+  function phrase(prog, calm) {      // 4 bars of 8 eighth-notes; returns [stepIndex, midiNote] pairs
+    const notes = [];
+    for (let bar = 0; bar < 4; bar++) {
+      const c = prog[bar], rh = bar === 3 ? (calm ? [0] : [0, 2, 4]) : RHY[Math.floor(R() * (calm ? RHY.length : 5))];
+      for (const st of rh) {
+        let n;
+        if (st === 0) { const tones = c.map(x => x + 12).concat(c[0] + 24).filter(x => x >= 67 && x <= 84); n = tones.sort((a, b) => Math.abs(a - last) - Math.abs(b - last))[R() < .7 ? 0 : 1] ?? tones[0]; }
+        else { let i = scale.reduce((bi, x, k) => Math.abs(x - last) < Math.abs(scale[bi] - last) ? k : bi, 0); i += (R() < .5 ? 1 : -1) * (R() < .8 ? 1 : 2); n = scale[Math.max(3, Math.min(10, i))]; }
+        last = n; notes.push([bar * 8 + st, n]);
+      }
+    }
+    return notes;
+  }
+  function compose() { night = S.time < .22 || S.time > .79; const pr = PROG[night ? 'night' : 'day']; const A = phrases && loops % 3 ? phrases[0] : phrase(pr, night), B = phrase([pr[2], pr[3], pr[1], pr[3]], night); phrases = [A, A, B, A]; phrases.prog = [pr, pr, [pr[2], pr[3], pr[1], pr[3]], pr]; loops++; }
+  function tone(t, m, v, dur, type = 'triangle', att = .012) { const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.value = hz(m); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + att); g.gain.exponentialRampToValueAtTime(.0001, t + dur); o.connect(g); g.connect(out); g.connect(wet); o.start(t); o.stop(t + dur + .05); }
+  function schedule(t) {
+    const LEN = 4 * 32 + 16, s = step % LEN, rest = s >= 128;       // 16 bars of tune, then 2 quiet bars
+    if (s === 0) compose();
+    const ph = Math.min(3, Math.floor(s / 32)), ps = s % 32, bar = Math.floor(ps / 8) % 4, b8 = ps % 8, c = phrases.prog[ph][bar], soft = night ? .7 : 1;
+    if (b8 === 0) for (const m of c) tone(t, m, .016 * soft, 60 / (night ? 70 : 90) * 4.2, 'sine', .7);           // pad
+    if (b8 === 0 || b8 === 4) tone(t, c[0] - 12, .075 * soft, 1.1, 'sine');                                         // bass
+    if (!rest && (b8 === 2 || b8 === 6)) tone(t + .004, c[b8 === 2 ? 1 : 2], .028 * soft, .7);                    // arpeggio
+    if (!rest) for (const [st, n] of phrases[ph]) if (st === ps) { const v = (b8 === 0 ? .085 : .06) * soft * (.85 + R() * .3), h = t + R() * .012; tone(h, n, v, 1.0); tone(h, n + 12, v * .22, .5, 'sine'); }
+    step++;
+  }
+  function tick() {
+    if (!started || !ac || ac.state !== 'running') return;
+    if (next < ac.currentTime) next = ac.currentTime + .06;
+    while (next < ac.currentTime + .5) { schedule(next); next += 60 / (night ? 70 : 90) / 2; }
+  }
+  function vol() { if (out) out.gain.value = cfg.mute ? 0 : cfg.music / 100; }
+  function start() {
+    try {
+      ac ||= new AudioContext(); if (ac.state === 'suspended') ac.resume();
+      if (started) return; started = true;
+      out = ac.createGain(); wet = ac.createGain(); wet.gain.value = .3; vol();
+      const dl = ac.createDelay(1), fb = ac.createGain(), lp = ac.createBiquadFilter(), mix = ac.createGain();         // soft echo for a cosy room sound
+      dl.delayTime.value = .31; fb.gain.value = .32; lp.type = 'lowpass'; lp.frequency.value = 1800;
+      wet.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(mix); mix.connect(out); out.connect(ac.destination);
+      setInterval(tick, 100);
+    } catch { }
+  }
+  return { start, vol, get info() { return { started, step, night, state: ac?.state, first: phrases?.[0]?.slice(0, 12) }; } };
+})();
+for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => { if (S.me) music.start(); }, true);
+
 const sound = k => ({ chop: () => beep(140, .09, 'square', .05, -60), pick: () => beep(620, .07, 'sine', .06, 300), craft: () => { beep(520, .08); setTimeout(() => beep(780, .1), 80); }, lvl: () => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, .16, 'triangle', .08), i * 110)), hurt: () => beep(180, .2, 'sawtooth', .07, -100), eat: () => beep(300, .1, 'sine', .06, 120), place: () => beep(200, .1, 'square', .05, 80), bow: () => beep(700, .12, 'sine', .05, -500) }[k]?.());
 
 // ---------- graphics quality ----------
@@ -125,6 +180,7 @@ function start(init) {
   refreshMe({ name: init.me.name, look: init.me.look, armor: init.me.equip.body, tag: S.clan?.tag, col: S.clan?.color });
   for (const id of init.dead) { S.dead.add(id); world.setNode(id, false); }
   init.players.forEach(addPlayer); init.animals.forEach(addAnimal); init.structs.forEach(addStruct);
+  music.start();
   $('login').hidden = true; $('hud').hidden = false; ui.refresh(); ui.vitals();
   ui.toast(`Welcome to Kinwild, ${init.me.name}!`, 'big'); if (init.me.quest === 0) ui.toast('Click the game to look around. Press H for help.');
   if (init.peaceful) ui.chat({ ch: 'sys', m: 'Peaceful mode: wolves will not hunt players.' });
@@ -181,6 +237,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyR' && S.build) S.build.r = (S.build.r + 1) % 4;
   if (e.code === 'KeyZ' && S.build) { S.build.lvl = (S.build.lvl + 1) % 3; buildBar(); }
   if (e.code === 'KeyK' && S.target?.k === 's' && heldDef()?.tool === 'hammer') emit('demolish', { id: S.target.s.id });
+  if (e.code === 'KeyT') nextPiece();
 });
 addEventListener('keyup', e => { S.keys[e.code] = false; });
 addEventListener('blur', () => { S.keys = {}; });
@@ -280,22 +337,37 @@ function placement() {
 function placeBuild() { const p = placement(); emit('place', { t: S.build.t, ...p }, r => { if (r?.err) ui.toast(r.err, 'bad'); else if (r?.ok) sound('place'); }); }
 
 // ---------- targeting ----------
+function nextPiece() { const l = S.hamList; if (!l || l.length < 2) return; const i = l.findIndex(o => o.s.id === (S.target?.s?.id)); S.hamSel = l[(i + 1) % l.length].s.id; sound('pick'); }
 function findTarget() {
   const [fx, fz] = fwd(), def = heldDef(), hammer = def?.tool === 'hammer'; let best = null, bs = 1e9;
   const consider = (x, z, reach, obj, bias = 0) => { const dx = x - me.x, dz = z - me.z, d = Math.hypot(dx, dz); if (d > reach) return; const dot = d < .01 ? 1 : (dx * fx + dz * fz) / d; if (dot < .1 && d > 1.4) return; const sc = d - dot * 1.6 + bias; if (sc < bs) { bs = sc; best = obj; } };
   for (const a of S.animals.values()) consider(a.g.position.x, a.g.position.z, (def?.reach || 2.6) + 1, { k: 'a', a, x: a.g.position.x, y: a.g.position.y, z: a.g.position.z, r: .7 }, def?.dmg > 2 ? -1.5 : 0);
   nodesNear(me.x, me.z, n => consider(n.x, n.z, 3.6, { k: 'n', node: n, x: n.x, y: n.y, z: n.z, r: (NODES[n.t].r || .5) * n.s + .25 }));
-  for (const s of S.structs.values()) { const d = STRUCTS[s.t]; if (Math.abs(s.y - me.y) > 3.5) continue; if (hammer || d.kind === 'place' || d.door) consider(s.x, s.z, d.kind === 'foundation' || d.kind === 'floor' || d.kind === 'roof' ? 3 : 3.4, { k: 's', s, x: s.x, y: s.y, z: s.z, r: d.kind === 'place' ? (d.r || 1.3) + .3 : 1.2 }, hammer ? -.5 : .2); }
+  // With the hammer every piece in reach is a candidate, and things built on top (roof, stairs, upper floor)
+  // are offered before the foundation under them, which sits at the same spot. T / B steps through the rest.
+  const HB = { roof: -.9, stairs: -.7, floor: -.5, place: -.3, wall: -.2, foundation: 0 }, list = [];
+  for (const s of S.structs.values()) {
+    const d = STRUCTS[s.t];
+    const o = { k: 's', s, x: s.x, y: s.y, z: s.z, r: d.kind === 'place' ? (d.r || 1.3) + .3 : 1.2 };
+    if (hammer) {
+      if (Math.abs(s.y - me.y) > 7) continue;
+      const dx = s.x - me.x, dz = s.z - me.z, dist = Math.hypot(dx, dz); if (dist > 4.6) continue;
+      const dot = dist < .01 ? 1 : (dx * fx + dz * fz) / dist; if (dot < .1 && dist > 1.4) continue;
+      list.push([dist - dot * 1.6 + HB[d.kind], o]);
+    } else if (Math.abs(s.y - me.y) <= 3.5 && (d.kind === 'place' || d.door)) consider(s.x, s.z, 3.4, o, .2);
+  }
+  S.hamList = null;
+  if (list.length) { list.sort((a, b) => a[0] - b[0]); S.hamList = list.map(x => x[1]); return S.hamList.find(o => o.s.id === S.hamSel) || S.hamList[0]; }
   return best;
 }
 function promptFor(t) {
-  const def = heldDef(), pu = padUI(), K = k => `<kbd>${pu ? { E: 'X', Click: 'RT', K: 'R3' }[k] || k : k}</kbd>`;
+  const def = heldDef(), pu = padUI(), K = k => `<kbd>${pu ? { E: 'X', Click: 'RT', K: 'R3', T: 'B' }[k] || k : k}</kbd>`;
   if (S.fishing) return '🎣 Waiting for a bite…';
   if (!t) return nearWater() ? `${K('E')} Drink` : '';
   if (t.k === 'a') return `${ANIMALS[t.a.t].n} — ${K('Click')} attack`;
   if (t.k === 'n') { const nd = NODES[t.node.t]; if (nd.pick) return `${K('E')} ${nd.verb} ${nd.n}`; const ok = def?.tool === nd.tool; return `${nd.n} — ${K('Click')} ${nd.tool === 'axe' ? (ok ? 'chop' : 'punch for sticks (an axe gets wood)') : (ok ? 'mine' : 'needs a pickaxe')}`; }
   const s = t.s, d = STRUCTS[s.t], own = s.o === S.id ? '' : ` <small>(${s.on})</small>`;
-  if (def?.tool === 'hammer') return `${d.n}${own} — ${K('K')} take apart`;
+  if (def?.tool === 'hammer') { const l = S.hamList || []; return `${d.n}${own} — ${K('K')} take apart${l.length > 1 ? ` &nbsp; ${K('T')} next piece (${l.findIndex(o => o.s.id === s.id) + 1} of ${l.length})` : ''}`; }
   if (d.station) return `${K('E')} Use ${d.n}`;
   if (d.door) return `${K('E')} ${s.d.open ? 'Close' : 'Open'} door`;
   if (s.t === 'chest') return `${K('E')} Open chest${own}`;
@@ -365,7 +437,7 @@ function pollPad(dt) {
   if (hit(7)) primary();
   if (hit(2)) { if (S.build) S.build.r = (S.build.r + 1) % 4; else interact(); }
   if (hit(3)) { if (S.build) { S.build.lvl = (S.build.lvl + 1) % 3; buildBar(); } else ui.open('bag'); }
-  if (hit(1) && S.build) stopBuild();
+  if (hit(1)) { if (S.build) stopBuild(); else nextPiece(); }
   if (hit(6)) { S.sneak = !S.sneak; ui.toast(S.sneak ? 'Sneaking…' : 'Standing up'); }
   if (hit(4)) select(S.sel - 1); if (hit(5)) select(S.sel + 1);
   if (hit(11) && S.target?.k === 's' && heldDef()?.tool === 'hammer') emit('demolish', { id: S.target.s.id });
@@ -452,4 +524,4 @@ function frame() {
   renderer.render(scene, camera);
 }
 frame();
-window.KW = { me, cam, S, primary, interact, startBuild, placement, select, ui, cfg };
+window.KW = { me, cam, S, primary, interact, startBuild, placement, select, ui, cfg, music, emit };

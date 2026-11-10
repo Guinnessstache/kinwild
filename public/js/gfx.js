@@ -148,7 +148,7 @@ export function makeStruct(s, clanColor) {
       if (STRUCTS[t].door) { const d = new THREE.Group(); d.position.set(-.75, 0, 0); d.add(M([P(box(1.5, 2.45, .1), stone ? WOOD : DARK, .75, 1.23, 0), P(box(.08, .08, .2), '#d9b23a', 1.3, 1.2, 0)])); g.add(d); u.door = d; }
       break;
     case 'floor': add([P(box(4, .2, 4), stone ? STONE2 : PLANK, 0, -.1, 0), P(box(4, .12, .2), DARK, 0, -.24, -1.9), P(box(4, .12, .2), DARK, 0, -.24, 1.9)]); break;
-    case 'roof': { const c = stone ? '#59636e' : THATCH; add([P(box(4.3, .18, 2.75), c, 0, .78, -1.08, .68), P(box(4.3, .18, 2.75), c, 0, .78, 1.08, -.68), P(box(4.4, .16, .3), stone ? '#434b54' : '#b89a45', 0, 1.62, 0)]); break; }
+    case 'roof': { const c = stone ? '#59636e' : THATCH; add([P(box(4.3, .18, 2.75), c, 0, .78, -1.08, -.68), P(box(4.3, .18, 2.75), c, 0, .78, 1.08, .68), P(box(4.4, .16, .3), stone ? '#434b54' : '#b89a45', 0, 1.62, 0)]); break; }
     case 'stairs': add([0, 1, 2, 3, 4, 5].map(i => P(box(3.6, .5, 4 / 6 + .02), i % 2 ? PLANK : WOOD, 0, .25 + i * .5, -2 + (i + .5) * (4 / 6)))); break;
     case 'campfire': add([...[0, 1, 2, 3, 4, 5, 6, 7].map(i => P(dod(.16), i % 2 ? STONE : STONE2, Math.cos(i * .785) * .55, .1, Math.sin(i * .785) * .55)), P(cyl(.08, .08, .9, 5), DARK, 0, .16, 0, 0, 0, 1.3), P(cyl(.08, .08, .9, 5), '#3a2a1e', 0, .16, 0, 1.3, .9, 0), P(cyl(.08, .08, .9, 5), DARK, 0, .2, 0, 1.3, -.9, 0)]); fire(.55, 1, 30); break;
     case 'torch_post': add([P(cyl(.05, .07, 1.7, 5), DARK, 0, .85, 0)]); fire(1.85, .45, 22); break;

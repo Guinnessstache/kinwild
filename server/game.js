@@ -405,6 +405,7 @@ export class Game {
     const s = this.structs.get(d.id); if (!s || !this.near(p, s, 8)) return;
     if (!this.canUse(p, s)) return this.toast(p, `That belongs to ${s.on}`, 'bad');
     if (s.d.inv?.some(Boolean)) return this.toast(p, 'Empty the chest first', 'bad');
+    if (STRUCTS[s.t].kind === 'foundation') for (const o of this.structs.values()) { const k = STRUCTS[o.t].kind; if (o !== s && (k === 'stairs' || k === 'floor' || k === 'roof') && Math.abs(o.x - s.x) < .3 && Math.abs(o.z - s.z) < .3) return this.toast(p, `Take the ${STRUCTS[o.t].n} off this foundation first`, 'bad'); }
     this.structs.delete(s.id); this.dirty = true; this.io.to('game').emit('st-', s.id);
     const cost = STRUCTS[s.t].cost; for (const k in cost) this.give(p, k, Math.floor(cost[k] / 2));
   }

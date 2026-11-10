@@ -60,6 +60,19 @@ Each player picks a name and a PIN. Same name + PIN brings the character back on
 
 The "Next step" box walks new players through 19 steps from punching a tree to forging iron.
 
+## Build 6 additions
+
+- **Classes** follow the weapon in hand: sword = Guardian (tank, Taunt), spear = Striker (melee damage, Power Strike), bow = Ranger (ranged damage, Aimed Shot), staff = Mender (healer; left click heals the most hurt player nearby, Group Heal). Ability on Q (controller B). Four combat skills: Melee, Archery, Defense, Healing.
+- **Gear**: head, chest and legs in cloth (healing), leather (power) or plate (armor and health), with a set bonus for three of a kind. Crafted and looted gear rolls a quality (Common, Fine, Superior, Epic) and random stats. Tier 2 gear and the Traveler's Pack need recipe scrolls that monsters drop. Bags add inventory slots.
+- **Monster levels and zones**: monsters gain a level every 45 m from the starting meadow (1 to 10) and stand on a ring coloured by their level next to yours. New monsters: giant spiders and bears. Tougher monsters drop more, plus scrolls and gear.
+- **Storage and crafting**: crafting uses ingredients from your bag and from your chests and stations in reach. Crafting stations hold 10 items and can be upgraded twice (+5 slots, tier 2 recipes). Sort buttons, and "Stack matching items" between bag and chests.
+- **Food buffs**: bread, soup, juice, stew, pie and Hunter's Feast give timed bonuses.
+- **Return Home** (F): 4 second cast, 30 minute cooldown, takes you to your bed.
+- **Players panel** (P): who is online, parties of up to 5 with shared kill XP and party chat (/p), player-to-player trading, and proximity voice chat (WebRTC; needs a microphone and HTTPS or localhost).
+- **Permissions**: in the menu, choose who can use your doors, chests and stations: only you, your clan, clan and party, or everyone.
+- **Building**: free camera in build mode (V), stairs continue upward when placed past the top of another flight (4 flights), and trees or rocks under a building no longer grow back through it.
+- **Controller**: on-screen keyboard for names, PIN and chat (A on a text box; Back/View opens chat).
+
 ## What is in build 1
 
 - **Skills (9)**: woodcutting, mining, foraging, farming, hunting, fishing, crafting, cooking, building. Levels 1-50, earned by doing. They add bonus loot, speed up crops and bites, toughen crafted tools and unlock recipes and building pieces.

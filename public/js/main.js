@@ -1,12 +1,12 @@
 // Client: input, third-person controller, networking, and glue between the 3D world and the UI.
 import * as THREE from 'three';
-import { ITEMS, NODES, STRUCTS, ANIMALS, SKILLS } from '/shared/data.js';
+import { ITEMS, NODES, STRUCTS, ANIMALS, SKILLS, CLASSES, ABIL_CD, QUAL, conColor, combatLevel, zoneLevel, zoneName, calcStats } from '/shared/data.js';
 import { heightAt, SPAWN } from '/shared/terrain.js';
 import * as G from './gfx.js';
 import { createUI } from './ui.js';
 
 const $ = id => document.getElementById(id);
-const S = window.S = { me: null, id: null, players: new Map(), animals: new Map(), structs: new Map(), dead: new Set(), time: .3, clan: null, invites: [], chest: null, sel: 0, build: null, off: 0, keys: {}, stam: 100, target: null, sneak: false, fishing: false };
+const S = window.S = { me: null, id: null, players: new Map(), animals: new Map(), structs: new Map(), dead: new Set(), time: .3, clan: null, invites: [], chest: null, sel: 0, build: null, off: 0, keys: {}, stam: 100, target: null, sneak: false, fishing: false, stock: {}, who: [], party: null, pinv: null, trade: null, tradeAsk: null, voice: new Set(), cd: {}, fly: null, recall: null };
 const sock = io({ transports: ['websocket', 'polling'] });
 const emit = (ev, d, cb) => sock.emit(ev, d ?? {}, cb);
 
@@ -109,7 +109,7 @@ let fpsN = 0, fpsT = 0;       // if the first seconds run slowly, drop to fast g
 function fpsWatch(dt) { if (!S.me || localStorage.kwGfx || fpsT < 0) return; fpsN++; fpsT += dt; if (fpsT > 6) { if (fpsN / fpsT < 26 && !navigator.webdriver) { localStorage.kwGfx = 'low'; applyGfx(); ui.toast('Switched to fast graphics for a smoother game (change it in the menu: Esc)'); } fpsT = -1; } }
 
 // ---------- UI ----------
-const act = { emit, sound, select, startBuild, stations, drawMap, toggleGfx, cfg, setCfg, logout, lock };
+const act = { emit, sound, select, startBuild, stations, drawMap, toggleGfx, cfg, setCfg, logout, lock, padUI, recall, voiceToggle, voiceOn: () => voice.on };
 const ui = createUI(S, act);
 
 // ---------- login ----------
@@ -144,7 +144,14 @@ function addPlayer(p) {
   S.players.set(p.id, { ...p, char, tx: p.x, ty: p.y, tz: p.z, tr: p.r || 0, a: 0, held: 0 });
 }
 function refreshMe(p) { const pos = me.char?.position.clone(); if (me.char) scene.remove(me.char); me.char = G.makeCharacter(p.look, p.armor); me.char.add(G.makeLabel((p.tag ? `[${p.tag}] ` : '') + p.name, p.col || '#fff3c4')); if (pos) me.char.position.copy(pos); scene.add(me.char); S.pub = p; }
-function addAnimal(a) { const g = G.makeAnimal(a.t); g.position.set(a.x, a.y, a.z); scene.add(g); S.animals.set(a.id, { ...a, g, tx: a.x, ty: a.y, tz: a.z, tr: a.r || 0, mv: 0 }); }
+const ringGeo = new THREE.RingGeometry(.82, 1, 24); ringGeo.rotateX(-Math.PI / 2);
+const myLevel = () => combatLevel(S.me.skills);
+function addAnimal(a) {       // every monster stands on a ring coloured by its level next to yours
+  const g = G.makeAnimal(a.t), con = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: conColor(a.L, myLevel()), transparent: true, opacity: .9, depthWrite: false }));
+  con.position.y = .07; con.scale.setScalar(G.ANIMAL_R[a.t] || .7); g.add(con); g.position.set(a.x, a.y, a.z); scene.add(g);
+  S.animals.set(a.id, { ...a, g, con, tx: a.x, ty: a.y, tz: a.z, tr: a.r || 0, mv: 0 });
+}
+function recolor() { const l = myLevel(); for (const a of S.animals.values()) a.con.material.color.set(conColor(a.L, l)); }
 const col = { surf: [], walls: [], circ: [], ceil: [] };
 function addStruct(s) {
   const old = S.structs.get(s.id); if (old) scene.remove(old.g);
@@ -177,7 +184,8 @@ function groundAt(x, z, py) {
 function start(init) {
   S.id = init.id; S.me = init.me; S.time = init.time; S.off = init.now - Date.now(); S.clan = init.clan.clan; S.invites = init.clan.invites;
   me.x = init.me.x; me.z = init.me.z; me.y = heightAt(me.x, me.z);
-  refreshMe({ name: init.me.name, look: init.me.look, armor: init.me.equip.body, tag: S.clan?.tag, col: S.clan?.color });
+  refreshMe({ name: init.me.name, look: init.me.look, armor: ITEMS[init.me.equip.chest?.id]?.mat, tag: S.clan?.tag, col: S.clan?.color });
+  S.party = init.party.party; S.pinv = init.party.inv; S.voice = new Set(init.voice); partyHud();
   for (const id of init.dead) { S.dead.add(id); world.setNode(id, false); }
   init.players.forEach(addPlayer); init.animals.forEach(addAnimal); init.structs.forEach(addStruct);
   music.start();
@@ -195,21 +203,28 @@ sock.on('s', sn => {
   for (const [id, x, y, z, r, a, held] of sn.p) { const p = S.players.get(id); if (p) { p.tx = x; p.ty = y; p.tz = z; p.tr = r; p.a = a; G.setHeld(p.char, held || null, ITEMS[held]); } }
   for (const [id, x, y, z, r, mv] of sn.a) { const a = S.animals.get(id); if (a) { a.tx = x; a.ty = y; a.tz = z; a.tr = r; a.mv = mv; } }
 });
-sock.on('me', u => { Object.assign(S.me, u); if (u.hp != null) ui.vitals(); if (u.inv || u.skills || u.quest != null) { ui.refresh(); buildBar(); } });
+sock.on('me', u => { Object.assign(S.me, u); if (u.hp != null || u.max) ui.vitals(); if (u.skills) recolor(); if (u.inv || u.skills || u.quest != null || u.known || u.perm) { ui.refresh(); buildBar(); } });
 sock.on('nd', ([id, alive]) => { alive ? S.dead.delete(id) : S.dead.add(id); world.setNode(id, !!alive); });
 sock.on('st+', s => S.me && addStruct(s)); sock.on('st-', id => { const s = S.structs.get(id); if (s) { scene.remove(s.g); S.structs.delete(id); rebuildCol(); } });
 sock.on('st~', u => { const s = S.structs.get(u.id); if (!s) return; if (u.d) s.d = u.d; if ('c' in u) { s.c = u.c; if (s.t === 'clan_banner' && u.cc !== s.cc) { s.cc = u.cc; return addStruct(s); } } syncStruct(s); rebuildCol(); });
 sock.on('toast', t => ui.toast(t.m, t.k)); sock.on('chat', c => ui.chat(c));
-sock.on('got', g => { ui.feed(`+${g.n} ${ITEMS[g.id].i} ${ITEMS[g.id].n}`); });
+sock.on('got', g => { ui.feed(`+${g.n} ${ITEMS[g.id].i} <span ${g.q ? `style="color:${QUAL[g.q][1]}"` : ''}>${g.q ? QUAL[g.q][0] + ' ' : ''}${ITEMS[g.id].n}</span>`); });
 sock.on('lvl', l => { ui.toast(`⭐ ${SKILLS[l.sk].n} reached level ${l.l}!`, 'big'); sound('lvl'); });
 sock.on('questDone', q => { ui.toast('✔ ' + q.t, 'good'); sound('craft'); });
 sock.on('clan', c => { S.clan = c.clan; S.invites = c.invites; if (ui.tab === 'clan') ui.render(); });
-sock.on('chest', c => { S.chest = c; if (ui.tab !== 'bag') ui.open('bag'); else ui.render(); });
+sock.on('chest', c => { S.chest = c; if (c.t === 'chest' && ui.tab !== 'bag') ui.open('bag'); else if (ui.tab) ui.render(); });       // station storage shows inside the craft tab
 sock.on('hurt', () => { $('hurt').style.opacity = 1; setTimeout(() => $('hurt').style.opacity = 0, 200); sound('hurt'); });
-sock.on('tp', t => { me.x = t.x; me.y = t.y; me.z = t.z; me.vy = 0; ui.toast(t.msg, 'bad'); });
+sock.on('tp', t => { me.x = t.x; me.y = t.y; me.z = t.z; me.vy = 0; ui.toast(t.msg, t.good ? 'good' : 'bad'); });
+sock.on('ah', ([id, hp]) => { const a = S.animals.get(id); if (a) a.hp = hp; });
+sock.on('bolt', b => { const o = new THREE.Vector3(...b.o), t = new THREE.Vector3(...b.t); for (let i = 0; i <= 6; i++) { const q = o.clone().lerp(t, i / 6); puff(q.x, q.y, q.z, '#9be37a', 1); } });
+let partySig = '';
+sock.on('party', v => { S.party = v.party; S.pinv = v.inv; partyHud(); const sig = JSON.stringify([v.inv, v.party?.leader, v.party?.m.map(m => m.id)]); if (sig !== partySig) { partySig = sig; if (ui.tab === 'who') ui.render(); } });      // health ticks every second; only redraw the panel when the party itself changes
+sock.on('trade', v => { S.trade = v; if (v && ui.tab !== 'trade') ui.open('trade'); else if (!v && ui.tab === 'trade') ui.close(); else if (ui.tab) ui.render(); });
+sock.on('tradeAsk', v => { S.tradeAsk = v; if (ui.tab === 'who') ui.render(); });
+function partyHud() { $('party').innerHTML = (S.party?.m || []).filter(m => m.id !== S.id).map(m => `<div>${m.name} <span style="float:right">Lv ${m.lv}</span><i style="width:${Math.max(0, Math.min(100, 100 * m.hp / m.max))}%"></i></div>`).join(''); }
 sock.on('fished', f => { S.fishing = false; if (f.ok) { ui.toast('You caught a fish! 🐟', 'good'); sound('pick'); } });
 sock.on('sw', id => { const p = S.players.get(id); if (p) p.char.userData.swing = 1; });
-sock.on('fx', f => { if (f.k === 'hit') puff(f.x, f.y, f.z, f.c, 7); });
+sock.on('fx', f => { if (f.k === 'hit') puff(f.x, f.y, f.z, f.c, 7); else if (f.k === 'heal') puff(f.x, f.y, f.z, '#7dff8a', 9); else if (f.k === 'taunt') puff(f.x, f.y, f.z, '#ffd84a', 14); });
 sock.on('arrow', a => arrows.push({ m: arrowMesh(a), o: new THREE.Vector3(...a.o), d: new THREE.Vector3(...a.d), t: 0, len: a.len }));
 
 // ---------- particles & arrows ----------
@@ -228,13 +243,16 @@ addEventListener('keydown', e => {
   if (e.repeat) return; S.keys[e.code] = true;
   if (e.code === 'Escape') { if (performance.now() - lockLostT < 400) return; escT = performance.now(); if (S.build) stopBuild(); else if (ui.tab) ui.close(); else ui.open('menu'); return; }
   if (e.code === 'Enter') { $('chatin').focus(); document.exitPointerLock?.(); e.preventDefault(); return; }       // focus first so losing the mouse capture is not read as Esc
-  const tabs = { Tab: 'bag', KeyI: 'bag', KeyC: 'craft', KeyB: 'build', KeyG: 'clan', KeyM: 'map', KeyH: 'help' };
+  const tabs = { Tab: 'bag', KeyI: 'bag', KeyC: 'craft', KeyB: 'build', KeyG: 'clan', KeyM: 'map', KeyH: 'help', KeyP: 'who' };
   if (tabs[e.code]) { if (e.code === 'KeyB' && S.build) return stopBuild(); ui.open(tabs[e.code]); return; }
   if (ui.tab) { if (e.code.startsWith('Digit')) { const n = +e.code.slice(5); if (n >= 1 && n <= 8) ui.numKey(n - 1); } return; }
   if (e.code.startsWith('Digit')) { const n = +e.code.slice(5); if (n >= 1 && n <= 8) select(n - 1); }
   if (e.code === 'KeyE') interact();
   if (e.code === 'KeyX') { S.sneak = !S.sneak; ui.toast(S.sneak ? 'Sneaking…' : 'Standing up'); }
-  if (e.code === 'KeyR' && S.build) S.build.r = (S.build.r + 1) % 4;
+  if (e.code === 'KeyR' && S.build) { S.build.r = (S.build.r + 1) % 4; S.build.turned = true; }
+  if (e.code === 'KeyV' && S.build) toggleFly();
+  if (e.code === 'KeyQ') ability();
+  if (e.code === 'KeyF') recall();
   if (e.code === 'KeyZ' && S.build) { S.build.lvl = (S.build.lvl + 1) % 3; buildBar(); }
   if (e.code === 'KeyK' && S.target?.k === 's' && heldDef()?.tool === 'hammer') emit('demolish', { id: S.target.s.id });
   if (e.code === 'KeyT') nextPiece();
@@ -266,7 +284,7 @@ canvas.addEventListener('mousedown', e => {
 });
 addEventListener('mouseup', () => { dragging = false; S.hold = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-addEventListener('mousemove', e => { if (document.pointerLockElement === canvas || dragging) { const k = cfg.sens / 100; cam.yaw -= e.movementX * .0026 * k; cam.pitch = Math.min(1.35, Math.max(-.25, cam.pitch + e.movementY * .0022 * k * (cfg.invY ? -1 : 1))); } });
+addEventListener('mousemove', e => { if (document.pointerLockElement === canvas || dragging) { const k = cfg.sens / 100; cam.yaw -= e.movementX * .0026 * k; cam.pitch = Math.min(S.fly ? 1.5 : 1.35, Math.max(S.fly ? -1.2 : -.25, cam.pitch + e.movementY * .0022 * k * (cfg.invY ? -1 : 1))); } });
 addEventListener('wheel', e => { if (playing()) select(S.sel + (e.deltaY > 0 ? 1 : -1)); }, { passive: true });
 
 // ---------- actions ----------
@@ -280,7 +298,7 @@ function interact() {
   else if (nearWater()) emit('drink', {}, r => { if (r?.ok) { ui.toast('Ahh, fresh water! 💧', 'good'); sound('eat'); } });
 }
 function useStruct(s) {
-  const d = STRUCTS[s.t]; if (d.station) return ui.open('craft');
+  const d = STRUCTS[s.t]; if (d.station && ui.tab !== 'craft') ui.open('craft');        // the server then sends the station's storage if you may use it
   emit('sUse', { id: s.id }, r => { if (r?.ok) sound(r.ok === 'drink' ? 'eat' : 'pick'); if (r?.ok === 'harvest') ui.toast('Harvested! 🌾', 'good'); if (r?.ok === 'water') ui.toast('Watered 💧 — it will grow faster', 'good'); if (r?.ok === 'drink') ui.toast('Ahh, fresh water! 💧', 'good'); });
 }
 function primary() {
@@ -292,14 +310,30 @@ function primary() {
     for (let d = 2; d <= 8; d += 1) if (heightAt(me.x + fx * d, me.z + fz * d) < -.1) { swingAnim(); return emit('fish', { x: me.x + fx * d, z: me.z + fz * d }, r => { if (r?.ok) { S.fishing = true; ui.toast('Line is out… stand still and wait for a bite'); } else if (r?.err) ui.toast(r.err); }); }
     return ui.toast('Face the water to cast');
   }
+  if (def?.tool === 'staff') { if (performance.now() - me.lastSwing < 1350) return; swingAnim(); return emit('heal', { id: t?.k === 'a' ? t.a.id : null }, r => { if (r?.ok === 'heal') { sound('eat'); if (r.name) ui.feed(`✨ Healed ${r.name}`); } else if (r?.ok === 'bolt') sound('bow'); }); }
   const plot = t?.k === 's' && t.s.t === 'farm_plot';
-  if (def && (def.food || def.heal || def.armor || def.tool === 'water') && !plot) return emit('useItem', { slot: S.sel }, r => { if (r?.ok) sound('eat'); });
+  if (def && (def.food || def.heal || def.slot || def.learn || def.tool === 'water') && !plot) return emit('useItem', { slot: S.sel }, r => { if (r?.ok) sound('eat'); });
   if (performance.now() - me.lastSwing < 400) return;
   swingAnim();
   if (t?.k === 'a') { emit('swing', { k: 'a', id: t.a.id }); sound('chop'); }
   else if (t?.k === 'n') { if (NODES[t.node.t].pick) { emit('pick', { id: t.node.id }); sound('pick'); } else { emit('swing', { k: 'n', id: t.node.id }); sound('chop'); } }
   else if (t?.k === 's' && (STRUCTS[t.s.t].door || ['farm_plot', 'chest', 'bed', 'well', 'clan_banner'].includes(t.s.t) || STRUCTS[t.s.t].station) && def?.tool !== 'hammer') useStruct(t.s);
   else emit('swing', {});
+}
+// Class ability (Q / B): depends on the weapon in hand
+function ability() {
+  const def = heldDef(), tool = def?.tool, cl = CLASSES[tool]; if (!cl || S.build || ui.tab) return;
+  if (performance.now() < (S.cd[tool] || 0)) return ui.toast(`${cl[3]} is not ready yet`);
+  const done = r => { if (r?.ok) { S.cd[tool] = performance.now() + ABIL_CD[tool] * 1000; sound('lvl'); } else if (r?.err) ui.toast(r.err, 'bad'); };
+  if (tool === 'bow') { me.lastSwing = 0; swingAnim(); sound('bow'); const aim = aimPoint(), from = new THREE.Vector3(me.x, me.y + 1.4, me.z), dist = aim.distanceTo(from); aim.y += .0015 * dist * dist; aim.sub(from).normalize(); emit('shoot', { dx: aim.x, dy: aim.y, dz: aim.z, ab: 1 }); return done({ ok: 1 }); }
+  if (tool === 'spear' && S.target?.k !== 'a') return ui.toast('Get close to a monster first');
+  swingAnim(); emit('ability', { id: S.target?.k === 'a' ? S.target.a.id : null }, done);
+}
+// Return Home: stand still for 4 seconds, then the server moves you to your bed (30 minute cooldown)
+function recall() {
+  if (S.recall || S.build) return; const left = (S.me.recallAt || 0) - (Date.now() + S.off);
+  if (left > 0) return ui.toast(`Return Home is ready in ${Math.ceil(left / 60000)} min`);
+  S.recall = { t: performance.now() + 4000, x: me.x, z: me.z }; ui.toast('Returning home in 4 seconds — move to cancel');
 }
 function aimPoint() {      // what is under the crosshair: an animal, the ground, or far away
   const d = new THREE.Vector3(), o = camera.position; camera.getWorldDirection(d);
@@ -310,19 +344,26 @@ function aimPoint() {      // what is under the crosshair: an animal, the ground
   }
   return o.clone().addScaledVector(d, 70);
 }
-function stations() { const out = new Set(); for (const s of S.structs.values()) { const st = STRUCTS[s.t].station; if (st && Math.hypot(s.x - me.x, s.z - me.z) < 7) out.add(st); } return out; }
+function stations() { const out = {}; for (const s of S.structs.values()) { const st = STRUCTS[s.t].station; if (st && Math.hypot(s.x - me.x, s.z - me.z) < 7) out[st] = Math.max(out[st] || 0, s.d.tier || 1); } return out; }       // station -> best tier in reach
 
 // ---------- building ----------
 function startBuild(t) { stopBuild(); S.build = { t, r: 0, lvl: 0, ghost: G.ghostOf({ t, d: {} }) }; scene.add(S.build.ghost); buildBar(); lock(); }
-function stopBuild() { if (!S.build) return; scene.remove(S.build.ghost); S.build = null; $('buildbar').hidden = true; }
+function stopBuild() { if (!S.build) return; scene.remove(S.build.ghost); S.build = null; S.fly = null; $('buildbar').hidden = true; }
+// Free camera for building: the view leaves the character and flies around so you can see roofs and tight corners.
+function toggleFly() { S.fly = S.fly ? null : { x: camera.position.x, y: camera.position.y, z: camera.position.z }; buildBar(); if (S.fly) ui.toast('Free camera: move with WASD, Space up, Shift down. V returns to your character.'); }
+function flyAim(py) {        // where the middle of the screen meets the level being built on
+  const d = new THREE.Vector3(); camera.getWorldDirection(d); const o = camera.position;
+  const t = d.y < -.05 ? Math.min(14, (py - o.y) / d.y) : 5; return [o.x + d.x * Math.max(1, t), o.z + d.z * Math.max(1, t)];
+}
 function buildBar() {
   if (!S.build) return; const d = STRUCTS[S.build.t], p = padUI(), hint = ui.costHint(d);
   $('buildbar').hidden = false;
-  $('buildbar').innerHTML = `${d.i} <b>${d.n}</b> &nbsp; <kbd>${p ? 'RT' : 'Click'}</kbd>place <kbd>${p ? 'X' : 'R'}</kbd>turn ${d.kind !== 'place' && d.kind !== 'foundation' ? `<kbd>${p ? 'Y' : 'Z'}</kbd>level ${(S.build.L ?? S.build.lvl) + 1} ` : ''}<kbd>${p ? 'B' : 'Esc'}</kbd>done<div class="need">Needs: ${ui.costHtml(d.cost)}</div>${hint ? `<div class="need hint">${hint}</div>` : ''}`;
+  $('buildbar').innerHTML = `${d.i} <b>${d.n}</b> &nbsp; <kbd>${p ? 'RT' : 'Click'}</kbd>place <kbd>${p ? 'X' : 'R'}</kbd>turn ${d.kind !== 'place' && d.kind !== 'foundation' ? `<kbd>${p ? 'Y' : 'Z'}</kbd>level ${(S.build.L ?? S.build.lvl) + 1} ` : ''}<kbd>${p ? 'R3' : 'V'}</kbd>${S.fly ? 'walk view' : 'free camera'} <kbd>${p ? 'B' : 'Esc'}</kbd>done<div class="need">Needs: ${ui.costHtml(d.cost)}</div>${hint ? `<div class="need hint">${hint}</div>` : ''}`;
 }
 function placement() {
   const b = S.build, d = STRUCTS[b.t], [fx, fz] = fwd(), reach = d.kind === 'place' || d.kind === 'stairs' ? 2.6 : d.kind === 'roof' || d.kind === 'floor' ? 1.5 : 4.2 + cam.pitch * 2;      // roofs and ceilings go over the square you stand in (or are stepping into)
-  const ax = me.x + fx * reach, az = me.z + fz * reach, cx = Math.round(ax / 4) * 4, cz = Math.round(az / 4) * 4;
+  const aim = S.fly ? flyAim(me.y + 3 * b.lvl) : null;         // in free camera you aim with the middle of the screen
+  const ax = aim ? aim[0] : me.x + fx * reach, az = aim ? aim[1] : me.z + fz * reach, cx = Math.round(ax / 4) * 4, cz = Math.round(az / 4) * 4;
   let base = null, bd = 11; for (const s of S.structs.values()) if (STRUCTS[s.t].kind === 'foundation') { const q = Math.hypot(s.x - cx, s.z - cz); if (q < bd && Math.abs(s.y - me.y) < 7) { bd = q; base = s.y; } }
   base ??= Math.max(heightAt(cx - 2, cz - 2), heightAt(cx + 2, cz - 2), heightAt(cx - 2, cz + 2), heightAt(cx + 2, cz + 2), .2) + .35;
   // Pieces stack on their own: placing where a piece already is goes one level up (walls up to 3 high), and a roof
@@ -334,7 +375,7 @@ function placement() {
     case 'foundation': return { x: cx, y: base, z: cz, r: 0 };
     case 'wall': {
       // snap to whichever square edge is nearest the spot 3 m in front of the player
-      const wx = me.x + fx * 3, wz = me.z + fz * 3, ex = Math.round((wx - 2) / 4) * 4 + 2, ez = Math.round((wz - 2) / 4) * 4 + 2;
+      const wx = aim ? aim[0] : me.x + fx * 3, wz = aim ? aim[1] : me.z + fz * 3, ex = Math.round((wx - 2) / 4) * 4 + 2, ez = Math.round((wz - 2) / 4) * 4 + 2;
       const side = Math.abs(wx - ex) < Math.abs(wz - ez), x = side ? ex : Math.round(wx / 4) * 4, z = side ? Math.round(wz / 4) * 4 : ez, r = side ? 1 : 0;
       if (b.t === 'fence' && bd > 10) return { x, y: heightAt(x, z), z, r };
       const max = d.gable ? 3 : 2; while (L < max && occ('wall', x, base + 3 * L, z, r)) L++;
@@ -342,7 +383,15 @@ function placement() {
     }
     case 'floor': while (L < 2 && occ('floor', cx, base + 3 * (L + 1), cz)) L++; return { x: cx, y: base + 3 * (L + 1), z: cz, r: 0, L };
     case 'roof': L = Math.max(L, wallTop()); return { x: cx, y: base + 3 * (L + 1), z: cz, r: b.r % 2, L };
-    case 'stairs': while (L < 2 && occ('stairs', cx, base + 3 * L, cz)) L++; return { x: cx, y: base + 3 * L, z: cz, r: b.r, L };
+    case 'stairs': {          // a flight placed just past the top of another one continues it: same direction, one level up (4 flights high)
+      let r = b.r;
+      for (const s of S.structs.values()) if (STRUCTS[s.t].kind === 'stairs') {
+        const dx = Math.round(Math.sin(s.r * Math.PI / 2)), dz = Math.round(Math.cos(s.r * Math.PI / 2));
+        if (Math.abs(s.x + 4 * dx - cx) < .3 && Math.abs(s.z + 4 * dz - cz) < .3 && (!b.turned || s.r === b.r)) { r = s.r; L = Math.max(L, Math.round((s.y - base) / 3) + 1); }
+      }
+      L = Math.min(L, 3); while (L < 3 && occ('stairs', cx, base + 3 * L, cz)) L++;
+      return { x: cx, y: base + 3 * L, z: cz, r, L };
+    }
     default: { const x = Math.round(ax * 2) / 2, z = Math.round(az * 2) / 2; return { x, y: groundAt(x, z, me.y + .5), z, r: b.r }; }
   }
 }
@@ -376,7 +425,7 @@ function promptFor(t) {
   const def = heldDef(), pu = padUI(), K = k => `<kbd>${pu ? { E: 'X', Click: 'RT', K: 'R3', T: 'B' }[k] || k : k}</kbd>`;
   if (S.fishing) return '🎣 Waiting for a bite…';
   if (!t) return nearWater() ? `${K('E')} Drink` : '';
-  if (t.k === 'a') return `${ANIMALS[t.a.t].n} — ${K('Click')} attack`;
+  if (t.k === 'a') return `<b style="color:${conColor(t.a.L, myLevel())}">${ANIMALS[t.a.t].n} · Lv ${t.a.L}</b><span class="mobhp"><i style="width:${t.a.hp ?? 100}%"></i></span>${K('Click')} ${def?.tool === 'staff' ? 'zap (heals come first)' : 'attack'}`;
   if (t.k === 'n') { const nd = NODES[t.node.t]; if (nd.pick) return `${K('E')} ${nd.verb} ${nd.n}`; const ok = def?.tool === nd.tool; return `${nd.n} — ${K('Click')} ${nd.tool === 'axe' ? (ok ? 'chop' : 'punch for sticks (an axe gets wood)') : (ok ? 'mine' : 'needs a pickaxe')}`; }
   const s = t.s, d = STRUCTS[s.t], own = s.o === S.id ? '' : ` <small>(${s.on})</small>`;
   if (def?.tool === 'hammer') { const l = S.hamList || []; return `${d.n}${own} — ${K('K')} take apart${l.length > 1 ? ` &nbsp; ${K('T')} next piece (${l.findIndex(o => o.s.id === s.id) + 1} of ${l.length})` : ''}`; }
@@ -396,20 +445,26 @@ const mapImg = (() => { const c = document.createElement('canvas'); c.width = c.
 function mapDots(x, toPx, scale) {
   const dot = (wx, wz, c, r) => { const [px, py] = toPx(wx, wz); x.fillStyle = c; x.strokeStyle = '#1b1208'; x.lineWidth = 1.5; x.beginPath(); x.arc(px, py, r, 0, 7); x.fill(); x.stroke(); };
   for (const s of S.structs.values()) if ((s.o === S.id || (S.clan && s.c === S.clan.id)) && (s.t === 'bed' || s.t === 'campfire' || s.t === 'clan_banner')) dot(s.x, s.z, s.t === 'clan_banner' ? S.clan?.color || '#fff' : '#ffb347', 3 * scale);
-  for (const p of S.players.values()) dot(p.char.position.x, p.char.position.z, p.col || '#dddddd', 4 * scale);
+  for (const p of S.players.values()) dot(p.char.position.x, p.char.position.z, S.party?.m.some(m => m.id === p.id) ? '#7dff8a' : p.col || '#dddddd', 4 * scale);
   const [px, py] = toPx(me.x, me.z); x.save(); x.translate(px, py); x.rotate(-me.yaw + Math.PI); x.fillStyle = '#fff'; x.strokeStyle = '#1b1208'; x.lineWidth = 2; x.beginPath(); x.moveTo(0, -7 * scale); x.lineTo(5 * scale, 6 * scale); x.lineTo(-5 * scale, 6 * scale); x.closePath(); x.fill(); x.stroke(); x.restore();
 }
 function drawMini() { const c = $('mini'), x = c.getContext('2d'), R = 60, s = 170 / (R * 2); x.drawImage(mapImg, (me.x - R + 320) / 2, (me.z - R + 320) / 2, R, R, 0, 0, 170, 170); mapDots(x, (wx, wz) => [(wx - me.x + R) * s, (wz - me.z + R) * s], 1); }
-function drawMap(c) { const x = c.getContext('2d'); x.imageSmoothingEnabled = true; x.drawImage(mapImg, 0, 0, c.width, c.height); mapDots(x, (wx, wz) => [(wx + 320) / 640 * c.width, (wz + 320) / 640 * c.height], 1.3); }
+function drawMap(c) {
+  const x = c.getContext('2d'), k = c.width / 640; x.imageSmoothingEnabled = true; x.drawImage(mapImg, 0, 0, c.width, c.height);
+  x.save(); x.setLineDash([6, 5]); x.lineWidth = 1.5; x.font = '700 12px sans-serif'; x.textAlign = 'center';       // level zones ring the starting meadow
+  [90, 180, 270, 360].forEach(r => { x.strokeStyle = 'rgba(255,255,255,.75)'; x.beginPath(); x.arc((SPAWN.x + 320) * k, (SPAWN.z + 320) * k, r * k, 0, 7); x.stroke(); });
+  x.setLineDash([]); ['Home Meadows 1–2', 'Greenwood 3–4', 'Wildwood 5–6', 'Highlands 7–8', 'Far Reaches 9–10'].forEach((n, i) => { for (const sg of [-1, 1]) { const py = (SPAWN.z + 320 + sg * (i * 90 + 45)) * k; if (py > 10 && py < c.height - 6 && (i || sg < 0)) { x.lineWidth = 3; x.strokeStyle = 'rgba(20,14,8,.8)'; x.strokeText(n, (SPAWN.x + 320) * k, py); x.fillStyle = '#fff'; x.fillText(n, (SPAWN.x + 320) * k, py); } } });
+  x.restore(); mapDots(x, (wx, wz) => [(wx + 320) * k, (wz + 320) * k], 1.3);
+}
 
 // ---------- gamepad ----------
 // Standard (Xbox-style) layout. In the world it drives the character; with a panel open it moves a highlight around the menu.
-const KEYS_KB = $('keys').innerHTML, KEYS_PAD = '<span><b>Y</b> Bag</span> <span><b>X</b> Use</span> <span><b>RT</b> Action</span> <span><b>A</b> Jump</span> <span><b>LB RB</b> Items</span> <span><b>↑</b> Craft</span> <span><b>→</b> Build</span> <span><b>←</b> Clan</span> <span><b>↓</b> Map</span> <span><b>Start</b> Menu</span>';
+const KEYS_KB = $('keys').innerHTML, KEYS_PAD = '<span><b>Y</b> Bag</span> <span><b>X</b> Use</span> <span><b>RT</b> Action</span> <span><b>A</b> Jump</span> <span><b>B</b> Ability</span> <span><b>LB RB</b> Items</span> <span><b>↑</b> Craft</span> <span><b>→</b> Build</span> <span><b>←</b> Players</span> <span><b>↓</b> Map</span> <span><b>Start</b> Menu</span>';
 let keysPad = false;
 const pad = { lastT: -1e9, mx: 0, mz: 0, run: false, jump: false, rt: false, prev: [], seen: false, navT: 0, navHeld: false, el: null, pt: null };
 const dead = v => Math.abs(v) < .2 ? 0 : (v - Math.sign(v) * .2) / .8;
-const canRepeat = () => { const d = heldDef(); return !S.build && !ui.tab && !(d && (d.food || d.heal || d.armor || d.tool === 'water')); };
-const navEls = () => [...document.querySelectorAll('#pbody .slot, #pbody button:not(:disabled), #pbody .card:not(.off), #pbody input')];
+const canRepeat = () => { const d = heldDef(); return !S.build && !ui.tab && !(d && (d.food || d.heal || d.slot || d.learn || d.tool === 'water')); };
+const navEls = () => { const r = S.me ? '#pbody' : '#loginForm'; return [...document.querySelectorAll(`${r} .slot, ${r} button:not(:disabled), ${r} .card:not(.off), ${r} input:not([type=color]), ${r} .sw b`)]; };
 const ctr = el => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
 function navFocus(el) { document.querySelectorAll('.gpfocus').forEach(e => e.classList.remove('gpfocus')); pad.el = el; if (!el) return; el.classList.add('gpfocus'); el.scrollIntoView({ block: 'nearest' }); pad.pt = ctr(el); }
 function navCur() {        // menus are re-drawn after every action, so re-find the highlight by where it was on screen
@@ -430,14 +485,15 @@ function pollPad(dt) {
   const b = gp.buttons.map(x => x.pressed || x.value > .5), hit = i => b[i] && !pad.prev[i];
   const lx = dead(gp.axes[0]), ly = dead(gp.axes[1]), rx = dead(gp.axes[2]), ry = dead(gp.axes[3]);
   if (b.some(Boolean) || lx || ly || rx || ry) { S.pad = true; pad.lastT = performance.now(); if (!pad.seen && S.me) { pad.seen = true; ui.toast('🎮 Controller ready — Y opens your bag, Start opens the menu'); } }
-  if (!S.me) { if (hit(0) && $('lname').value.trim()) $('loginForm').requestSubmit(); pad.prev = b; return; }
-  if (document.activeElement?.tagName === 'INPUT') { if (hit(1)) document.activeElement.blur(); pad.prev = b; return; }
-  if (ui.tab) {
+  if (osk.input) { oskPad(b, hit, lx, ly, dt); pad.prev = b; return; }
+  if (document.activeElement?.tagName === 'INPUT' && S.me) { if (hit(1)) document.activeElement.blur(); pad.prev = b; return; }
+  if (ui.tab || !S.me) {
     const dx = (b[15] ? 1 : 0) - (b[14] ? 1 : 0) || Math.sign(Math.abs(lx) > .5 ? lx : 0), dy = (b[13] ? 1 : 0) - (b[12] ? 1 : 0) || Math.sign(Math.abs(ly) > .5 ? ly : 0);
     navCur(); pad.navT -= dt;
     if (!dx && !dy) pad.navHeld = false; else if (!pad.navHeld || pad.navT <= 0) { pad.navT = pad.navHeld ? .13 : .32; pad.navHeld = true; navMove(dx, dx ? 0 : dy); }
     if (ry) $('pbody').scrollTop += ry * 900 * dt;
-    if (hit(0)) { const el = navCur(); if (el) { if (el.tagName === 'INPUT') el.focus(); else el.click(); } }
+    if (hit(0)) { const el = navCur(); if (el) { if (el.tagName === 'INPUT') oskOpen(el); else el.click(); } }
+    if (!S.me) { if (hit(9) && $('lname').value.trim()) $('loginForm').requestSubmit(); pad.prev = b; return; }
     if (hit(2)) navCur()?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
     if (hit(4)) cycleTab(-1); if (hit(5)) cycleTab(1);
     if (hit(1) || hit(3) || hit(9)) { ui.close(); pad.el = pad.pt = null; }
@@ -447,28 +503,88 @@ function pollPad(dt) {
   const ls = cfg.padSens / 100; cam.yaw -= rx * 2.9 * ls * dt; cam.pitch = Math.min(1.35, Math.max(-.25, cam.pitch + ry * 1.9 * ls * dt * (cfg.invY ? -1 : 1)));
   if (hit(10)) pad.run = true; if (Math.hypot(lx, ly) < .3) pad.run = false;
   if (hit(7)) primary();
-  if (hit(2)) { if (S.build) S.build.r = (S.build.r + 1) % 4; else interact(); }
+  if (hit(2)) { if (S.build) { S.build.r = (S.build.r + 1) % 4; S.build.turned = true; } else interact(); }
   if (hit(3)) { if (S.build) { S.build.lvl = (S.build.lvl + 1) % 3; buildBar(); } else ui.open('bag'); }
-  if (hit(1)) { if (S.build) stopBuild(); else nextPiece(); }
+  if (hit(1)) { if (S.build) stopBuild(); else if (heldDef()?.tool === 'hammer') nextPiece(); else ability(); }
   if (hit(6)) { S.sneak = !S.sneak; ui.toast(S.sneak ? 'Sneaking…' : 'Standing up'); }
   if (hit(4)) select(S.sel - 1); if (hit(5)) select(S.sel + 1);
-  if (hit(11) && S.target?.k === 's' && heldDef()?.tool === 'hammer') emit('demolish', { id: S.target.s.id });
-  const open = hit(12) ? 'craft' : hit(15) ? 'build' : hit(14) ? 'clan' : hit(13) || hit(8) ? 'map' : hit(9) ? 'menu' : null;
+  if (hit(11)) { if (S.build) toggleFly(); else if (S.target?.k === 's' && heldDef()?.tool === 'hammer') emit('demolish', { id: S.target.s.id }); }
+  if (hit(8)) oskOpen($('chatin'), ui.sendChat);
+  const open = hit(12) ? 'craft' : hit(15) ? 'build' : hit(14) ? 'who' : hit(13) ? 'map' : hit(9) ? 'menu' : null;
   if (open) { if (S.build) stopBuild(); pad.el = pad.pt = null; ui.open(open); }
   pad.prev = b;
 }
+
+// ---------- on-screen keyboard (for controller-only players) ----------
+const OSK = ['1234567890', 'qwertyuiop', 'asdfghjkl_', 'zxcvbnm /', ['⇧', 'Space', '⌫', 'Done']];
+const osk = { input: null, done: null, r: 1, c: 0, shift: false, navT: 0, held: false };
+function oskOpen(input, done) { osk.input = input; osk.done = done || null; osk.r = 1; osk.c = 0; $('osk').hidden = false; oskDraw(); }
+function oskClose(ok) { const d = osk.done; osk.input = null; $('osk').hidden = true; if (ok && d) d(); }
+function oskDraw() {
+  const v = osk.input.value, shown = osk.input.type === 'password' ? '•'.repeat(v.length) : v;
+  $('osk').innerHTML = `<div class="txt">${shown.replace(/[&<>]/g, '')}</div>` + OSK.map((row, r) => `<div class="row">${[...row].map((k, c) => `<button type="button" data-r="${r}" data-c="${c}" class="${r === osk.r && c === osk.c ? 'on' : ''}">${k.length === 1 && osk.shift ? k.toUpperCase() : k === ' ' ? '␣' : k}</button>`).join('')}</div>`).join('') + '<small>A type · X delete · Y space · Start done · B cancel</small>';
+}
+function oskKey(k) {
+  const el = osk.input, max = el.maxLength > 0 ? el.maxLength : 200;
+  if (k === 'Done') return oskClose(true); if (k === '⇧') osk.shift = !osk.shift;
+  else if (k === '⌫') el.value = el.value.slice(0, -1);
+  else if (el.value.length < max) { el.value += k === 'Space' ? ' ' : osk.shift ? k.toUpperCase() : k; osk.shift = false; }
+  el.dispatchEvent(new Event('input', { bubbles: true })); oskDraw();
+}
+$('osk').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { osk.r = +b.dataset.r; osk.c = +b.dataset.c; oskKey([...OSK[osk.r]][osk.c]); } });
+function oskPad(b, hit, lx, ly, dt) {
+  const dx = (b[15] ? 1 : 0) - (b[14] ? 1 : 0) || Math.sign(Math.abs(lx) > .5 ? lx : 0), dy = (b[13] ? 1 : 0) - (b[12] ? 1 : 0) || Math.sign(Math.abs(ly) > .5 ? ly : 0);
+  osk.navT -= dt;
+  if (!dx && !dy) osk.held = false; else if (!osk.held || osk.navT <= 0) {
+    osk.navT = osk.held ? .12 : .3; osk.held = true;
+    if (dy) { const frac = osk.c / Math.max(1, OSK[osk.r].length - 1); osk.r = (osk.r + dy + OSK.length) % OSK.length; osk.c = Math.round(frac * (OSK[osk.r].length - 1)); }
+    else osk.c = (osk.c + dx + OSK[osk.r].length) % OSK[osk.r].length;
+    oskDraw();
+  }
+  if (hit(0)) oskKey([...OSK[osk.r]][osk.c]); if (hit(2)) oskKey('⌫'); if (hit(3)) oskKey('Space'); if (hit(9)) oskClose(true); if (hit(1)) oskClose(false);
+}
+
+// ---------- proximity voice chat (WebRTC, browser to browser; the game server only passes the introductions) ----------
+const voice = { on: false, stream: null, peers: new Map() };
+async function voiceToggle() {
+  if (voice.on) { voice.on = false; emit('voice', { on: false }); voice.stream?.getTracks().forEach(t => t.stop()); for (const id of [...voice.peers.keys()]) voiceDrop(id); ui.toast('Voice chat off'); return; }
+  try { voice.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+  catch { ui.toast('No microphone, or the browser was not allowed to use it', 'bad'); return; }
+  voice.on = true; emit('voice', { on: true }); for (const id of S.voice) if (id !== S.id) voiceLink(id);
+  ui.toast('Voice chat on — players near you can hear you', 'good');
+}
+function voiceLink(id) {
+  if (voice.peers.has(id) || !voice.on) return voice.peers.get(id);
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }), au = new Audio(), peer = { pc, au, q: [] }; au.autoplay = true; voice.peers.set(id, peer);
+  voice.stream.getTracks().forEach(t => pc.addTrack(t, voice.stream));
+  pc.ontrack = e => { au.srcObject = e.streams[0]; au.play?.().catch(() => { }); };
+  pc.onicecandidate = e => { if (e.candidate) emit('rtc', { to: id, d: { ice: e.candidate } }); };
+  if (S.id < id) pc.createOffer().then(o => pc.setLocalDescription(o)).then(() => emit('rtc', { to: id, d: { sdp: pc.localDescription } })).catch(() => { });      // the lower name calls, the other answers
+  return peer;
+}
+function voiceDrop(id) { const p = voice.peers.get(id); if (!p) return; p.pc.close(); p.au.srcObject = null; voice.peers.delete(id); }
+sock.on('voice', v => { v.on ? S.voice.add(v.id) : S.voice.delete(v.id); if (v.id === S.id) return; if (v.on) voiceLink(v.id); else voiceDrop(v.id); if (ui.tab === 'who') ui.render(); });
+sock.on('rtc', async ({ from, d }) => {
+  const peer = voiceLink(from); if (!peer) return; const pc = peer.pc;
+  try {
+    if (d.sdp) { await pc.setRemoteDescription(d.sdp); for (const c of peer.q.splice(0)) await pc.addIceCandidate(c); if (d.sdp.type === 'offer') { await pc.setLocalDescription(await pc.createAnswer()); emit('rtc', { to: from, d: { sdp: pc.localDescription } }); } }
+    else if (d.ice) { if (pc.remoteDescription) await pc.addIceCandidate(d.ice); else peer.q.push(d.ice); }
+  } catch (e) { console.warn('voice', e.message); }
+});
+function voiceVolumes() { for (const [id, p] of voice.peers) { const o = S.players.get(id); p.au.volume = o ? Math.max(0, Math.min(1, 1 - (Math.hypot(o.char.position.x - me.x, o.char.position.z - me.z) - 6) / 34)) : 0; } }      // full volume within 6 m, silent past 40 m
+sock.on('p-', id => voiceDrop(id));
 
 // ---------- main loop ----------
 const clock = new THREE.Clock(); let netT = 0, slowT = 0, time = 0, lastSent = '';
 const lerpAng = (a, b, t) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * t;
 function updateMe(dt) {
   const k = S.keys, typing = document.activeElement?.tagName === 'INPUT';
-  let ix = 0, iz = 0; if (!typing && !ui.tab) { ix = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0) + pad.mx; iz = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0) + pad.mz; }
+  let ix = 0, iz = 0; if (!typing && !ui.tab && !S.fly) { ix = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0) + pad.mx; iz = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0) + pad.mz; }
   const [fx, fz] = fwd(); let mx = fx * iz - fz * ix, mz = fz * iz + fx * ix; const ml = Math.hypot(mx, mz), mag = Math.min(1, ml); if (ml > 0) { mx *= mag / ml; mz *= mag / ml; }
   const swim = heightAt(me.x, me.z) < -1.15 && me.y < -.6;
   const run = (k.ShiftLeft || k.ShiftRight || pad.run) && ml > .6 && S.stam > 1 && !swim && !S.sneak;
   S.stam = Math.max(0, Math.min(100, S.stam + (run ? -14 : 11) * dt));
-  const sp = swim ? 3.2 : S.sneak ? 2.4 : run ? 8.8 : 5.4, f = Math.min(1, dt * 12);
+  const sp = (swim ? 3.2 : S.sneak ? 2.4 : run ? 8.8 : 5.4) * (1 + (S.speed || 0) / 100), f = Math.min(1, dt * 12);
   me.vx += (mx * sp - me.vx) * f; me.vz += (mz * sp - me.vz) * f;
   let nx = me.x + me.vx * dt, nz = me.z + me.vz * dt;
   nodesNear(nx, nz, n => { const r = NODES[n.t].r; if (!r) return; const R = r * n.s + .35, dx = nx - n.x, dz = nz - n.z, d = Math.hypot(dx, dz); if (d < R && d > .001 && me.y < n.y + (G.NODE_H[n.t] || 1) * n.s) { nx = n.x + dx / d * R; nz = n.z + dz / d * R; } });
@@ -483,7 +599,7 @@ function updateMe(dt) {
     if (me.grounded && me.vy <= 0 && gy > me.y - .7) me.y = gy;
     else { me.vy -= 24 * dt; me.y += me.vy * dt; }
     if (me.y <= gy) { me.y = gy; me.vy = 0; me.grounded = true; } else if (me.y - gy > .05) me.grounded = false;
-    if ((k.Space || pad.jump) && me.grounded && !typing && !ui.tab) { me.vy = 8; me.grounded = false; me.y += .02; }
+    if ((k.Space || pad.jump) && me.grounded && !typing && !ui.tab && !S.fly) { me.vy = 8; me.grounded = false; me.y += .02; }
   }
   me.speed = Math.hypot(me.vx, me.vz); me.mode = swim ? 4 : S.sneak ? 3 : me.speed > 6.5 ? 2 : me.speed > .4 ? 1 : 0;
   if (performance.now() - me.lastSwing < 500 || (heldDef()?.tool === 'bow' && ml === 0)) me.yaw = lerpAng(me.yaw, Math.atan2(fx, fz), Math.min(1, dt * 14));
@@ -492,7 +608,16 @@ function updateMe(dt) {
   G.setHeld(me.char, held()?.id || null, heldDef()); G.animateCharacter(me.char, dt, me.speed, me.mode);
   if (S.fishing && me.speed > 1) S.fishing = false;
 }
+function updateFly(dt) {       // free build camera: fly around near the character
+  const k = S.keys, f = S.fly, sp = 9 * dt, [fx, fz] = fwd(), typing = document.activeElement?.tagName === 'INPUT' || ui.tab;
+  const ix = typing ? 0 : (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0) + pad.mx, iz = typing ? 0 : (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0) + pad.mz, iy = typing ? 0 : (k.Space || pad.jump ? 1 : 0) - (k.ShiftLeft || k.ShiftRight ? 1 : 0);
+  f.x += (fx * iz - fz * ix) * sp; f.z += (fz * iz + fx * ix) * sp; f.y += iy * sp;
+  const dx = f.x - me.x, dz = f.z - me.z, d = Math.hypot(dx, dz); if (d > 13) { f.x = me.x + dx / d * 13; f.z = me.z + dz / d * 13; }
+  f.y = Math.min(me.y + 16, Math.max(Math.max(heightAt(f.x, f.z), 0) + .6, f.y));
+  const cp = Math.cos(cam.pitch); camera.position.set(f.x, f.y, f.z); camera.lookAt(f.x - Math.sin(cam.yaw) * cp, f.y - Math.sin(cam.pitch), f.z - Math.cos(cam.yaw) * cp); me.char.visible = true;
+}
 function updateCamera(dt, focus) {
+  if (S.fly && S.me) return updateFly(dt);
   const cp = Math.cos(cam.pitch), tx = focus.x, ty = focus.y + 1.7, tz = focus.z;
   let d = cam.dist; let x, y, z; const dx = Math.sin(cam.yaw) * cp, dz = Math.cos(cam.yaw) * cp, sy = Math.sin(cam.pitch);
   if (S.me) {
@@ -510,6 +635,7 @@ function frame() {
   let focus; pollPad(raw); if (keysPad !== padUI()) { keysPad = padUI(); $('keys').innerHTML = keysPad ? KEYS_PAD : KEYS_KB; $('keys').classList.toggle('pad', keysPad); buildBar(); }
   if (S.me) {
     if ((S.hold || pad.rt) && canRepeat()) primary();
+    if (S.recall) { if (Math.hypot(me.x - S.recall.x, me.z - S.recall.z) > .6) { S.recall = null; ui.toast('Return Home cancelled'); } else if (performance.now() > S.recall.t) { S.recall = null; emit('recall', {}, r => { if (r?.err) ui.toast(r.err, 'bad'); else sound('lvl'); }); } }
     updateMe(dt); focus = me.char.position;
     const f = 1 - Math.exp(-dt * 12);
     for (const p of S.players.values()) { const c = p.char.position, moved = Math.hypot(p.tx - c.x, p.tz - c.z); c.x += (p.tx - c.x) * f; c.y += (p.ty - c.y) * f; c.z += (p.tz - c.z) * f; p.char.rotation.y = lerpAng(p.char.rotation.y, p.tr, f); G.animateCharacter(p.char, dt, [0, 5, 8.5, 2.4, 3][p.a] || (moved > .05 ? 4 : 0), p.a); }
@@ -524,7 +650,14 @@ function frame() {
     netT += dt; if (netT > .08) { netT = 0; const m = [+me.x.toFixed(2), +me.y.toFixed(2), +me.z.toFixed(2), +me.yaw.toFixed(2), me.mode]; const key = m.join(); if (key !== lastSent) { lastSent = key; sock.volatile.emit('mv', m); } }
     slowT += dt; if (slowT > .25) {
       slowT = 0; $('prompt').innerHTML = ui.tab ? '' : promptFor(S.target); $('bStam').style.width = S.stam + '%'; drawMini();
-      const hr = Math.floor(S.time * 24), mn = Math.floor((S.time * 24 % 1) * 60 / 10) * 10; $('clock').textContent = `${S.time > .23 && S.time < .77 ? '☀️' : '🌙'} ${String(hr).padStart(2, '0')}:${String(mn).padStart(2, '0')}`;
+      // zone, class ability and buff readouts
+      const zd = Math.hypot(me.x - SPAWN.x, me.z - SPAWN.z), zn = zoneName(zd), zi = Math.min(4, Math.floor(zd / 90));
+      if (S.zone !== zn) { if (S.zone) ui.toast(`Entering ${zn} — monsters level ${zi * 2 + 1}–${zi * 2 + 2}`, zi * 2 + 1 > myLevel() + 1 ? 'bad' : ''); S.zone = zn; }
+      const tool = heldDef()?.tool, cl = CLASSES[tool], cdl = Math.ceil(((S.cd[tool] || 0) - performance.now()) / 1000), bf = S.me.buff && S.me.buff.until > Date.now() + S.off ? S.me.buff : null;
+      S.speed = bf ? ITEMS[bf.id].buff.st.speed || 0 : 0;
+      $('abil').innerHTML = (cl ? `<div class="${cdl > 0 ? 'cd' : ''}">${cl[2]} ${cl[3]}<small>${cdl > 0 ? cdl + 's' : padUI() ? 'B' : 'Q'}</small></div>` : '') + (bf ? `<div class="buff">${ITEMS[bf.id].i} Buff<small>${Math.ceil((bf.until - Date.now() - S.off) / 60000)} min</small></div>` : '') + (S.recall ? `<div>🏠 Home<small>${Math.ceil((S.recall.t - performance.now()) / 1000)}s</small></div>` : '');
+      voiceVolumes();
+      const hr = Math.floor(S.time * 24), mn = Math.floor((S.time * 24 % 1) * 60 / 10) * 10; $('clock').textContent = `${S.time > .23 && S.time < .77 ? '☀️' : '🌙'} ${String(hr).padStart(2, '0')}:${String(mn).padStart(2, '0')} · ${zn} Lv ${zi * 2 + 1}–${zi * 2 + 2}`;
       const now = Date.now() + S.off; let lights = [];
       for (const s of S.structs.values()) { if (s.t === 'farm_plot') G.setCrop(s.g, s.d, now); if (s.g.userData.light) lights.push(s); }
       lights.sort((a, b) => Math.hypot(a.x - me.x, a.z - me.z) - Math.hypot(b.x - me.x, b.z - me.z)).forEach((s, i) => s.g.userData.light.visible = i < 5);
@@ -536,4 +669,4 @@ function frame() {
   renderer.render(scene, camera);
 }
 frame();
-window.KW = { me, cam, S, primary, interact, startBuild, placement, select, ui, cfg, music, emit };
+window.KW = { me, cam, S, primary, interact, startBuild, placement, select, ui, cfg, music, emit, voice, osk, oskOpen, ability, recall, toggleFly };

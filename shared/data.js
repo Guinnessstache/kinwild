@@ -8,11 +8,15 @@ export const SKILLS = {
   mining: { n: 'Mining', i: '⛏️', d: 'Bonus stone and ore' },
   foraging: { n: 'Foraging', i: '🌿', d: 'Bonus berries, fiber and finds' },
   farming: { n: 'Farming', i: '🌾', d: 'Faster crops, bigger harvests' },
-  hunting: { n: 'Hunting', i: '🏹', d: 'More damage and loot' },
+  hunting: { n: 'Hunting', i: '🏹', d: 'More loot from animals and monsters' },
   fishing: { n: 'Fishing', i: '🎣', d: 'Faster bites' },
   crafting: { n: 'Crafting', i: '🛠️', d: 'New recipes, tougher tools' },
   cooking: { n: 'Cooking', i: '🍲', d: 'New meals, food fills you more' },
   building: { n: 'Building', i: '🏠', d: 'New building pieces' },
+  melee: { n: 'Melee', i: '⚔️', d: 'Damage with swords and spears' },
+  archery: { n: 'Archery', i: '🎯', d: 'Damage with bows' },
+  defense: { n: 'Defense', i: '🛡️', d: 'More health. Grows when you take hits' },
+  healing: { n: 'Healing', i: '✨', d: 'Stronger heals with a staff' },
 };
 
 // Small drawn icons where no emoji fits. Icons are only ever inserted as HTML.
@@ -22,22 +26,29 @@ const IC_WOODWALL = SVG('<rect x="2" y="3.5" width="20" height="17" rx="1.5" fil
 const IC_GABLE = c => SVG(`<path d="M2 20 12 4 22 20z" fill="${c}" stroke="#3d2a18" stroke-width="1.4" stroke-linejoin="round"/><path d="M7 20v-8M12 20V4M17 20v-8" stroke="#3d2a18" stroke-width="1" opacity=".7"/>`);
 const T = (n, i, tool, pow, dmg, dur, reach = 3) => ({ n, i, tool, pow, dmg, dur, reach });
 const F = (n, i, h, t = 0, hp = 0, cooked = false) => ({ n, i, food: { h, t, hp }, cooked });
+// Armor comes in three materials: cloth (healing), leather (damage), plate (armor and health). tr = tier.
+const ARM = { cloth: { arm: 2, mend: 6 }, leather: { arm: 4, pow: 4 }, plate: { arm: 8, hp: 12 } };
+const A = (n, i, slot, mat, tr = 1) => { const m = (slot === 'chest' ? 1.5 : 1) * (tr === 2 ? 1.8 : 1), base = {}; for (const k in ARM[mat]) base[k] = Math.round(ARM[mat][k] * m); return { n, i, slot, mat, tr, gear: true, base }; };
+const BUFF = (it, st, t) => ({ ...it, buff: { st, t } });
 export const ITEMS = {
   // materials
   wood: { n: 'Wood', i: '🪵' }, stick: { n: 'Stick', i: '🥢' }, stone: { n: 'Stone', i: '🪨' }, flint: { n: 'Flint', i: '🔺' },
   fiber: { n: 'Plant Fiber', i: '🌿' }, clay: { n: 'Clay', i: '🟤' }, coal: { n: 'Coal', i: '⚫' }, iron_ore: { n: 'Iron Ore', i: '🟠' },
   plank: { n: 'Plank', i: '🟫' }, rope: { n: 'Rope', i: '🪢' }, cloth: { n: 'Cloth', i: '🧵' }, flax: { n: 'Flax', i: '💠' },
   hide: { n: 'Hide', i: '🦬' }, leather: { n: 'Leather', i: '👜' }, bone: { n: 'Bone', i: '🦴' }, feather: { n: 'Feather', i: '🪶' },
-  iron_bar: { n: 'Iron Bar', i: '🔩' }, nails: { n: 'Nails', i: '📌' }, brick: { n: 'Brick', i: '🧱' },
+  iron_bar: { n: 'Iron Bar', i: '🔩' }, nails: { n: 'Nails', i: '📌' }, brick: { n: 'Brick', i: '🧱' }, steel_bar: { n: 'Steel Bar', i: '⛓️' },
+  fang: { n: 'Fang', i: '🦷' }, spider_silk: { n: 'Spider Silk', i: '🕸️' }, thick_hide: { n: 'Thick Hide', i: '🐻' },
   // food
   berries: F('Berries', '🫐', 8, 4), mushroom: F('Mushroom', '🍄', 6), apple: F('Apple', '🍎', 10, 5),
   raw_meat: F('Raw Meat', '🥩', 6), raw_fish: F('Raw Fish', '🐟', 6),
   wheat: { n: 'Wheat', i: '🌾' }, carrot: F('Carrot', '🥕', 10, 3), potato: F('Potato', '🥔', 6), pumpkin: F('Pumpkin', '🎃', 10, 4), corn: F('Corn', '🌽', 8, 2),
   cooked_meat: F('Cooked Meat', '🍖', 35, 0, 8, true), cooked_fish: F('Grilled Fish', '🍤', 30, 0, 8, true),
   baked_potato: F('Baked Potato', '🥔', 22, 0, 4, true), roasted_corn: F('Roasted Corn', '🌽', 22, 0, 4, true),
-  bread: F('Bread', '🍞', 30, 0, 5, true), mushroom_soup: F('Mushroom Soup', '🥣', 28, 20, 8, true),
-  berry_juice: F('Berry Juice', '🧃', 8, 45, 5, true), stew: F('Hearty Stew', '🍲', 60, 25, 20, true),
-  pumpkin_pie: F('Pumpkin Pie', '🥧', 70, 0, 25, true),
+  // meals with a buff: st = bonus while it lasts, t = seconds. Higher cooking level recipes give bigger buffs.
+  bread: BUFF(F('Bread', '🍞', 30, 0, 5, true), { hp: 10 }, 600), mushroom_soup: BUFF(F('Mushroom Soup', '🥣', 28, 20, 8, true), { mend: 10 }, 600),
+  berry_juice: BUFF(F('Berry Juice', '🧃', 8, 45, 5, true), { speed: 8 }, 300), stew: BUFF(F('Hearty Stew', '🍲', 60, 25, 20, true), { hp: 20, pow: 10 }, 900),
+  pumpkin_pie: BUFF(F('Pumpkin Pie', '🥧', 70, 0, 25, true), { hp: 30, pow: 15, mend: 15 }, 1200),
+  hunters_feast: BUFF(F("Hunter's Feast", '🍱', 90, 30, 30, true), { hp: 45, pow: 22, mend: 22, speed: 6 }, 1800),
   // seeds
   wheat_seeds: { n: 'Wheat Seeds', i: '🌱', seed: 'wheat' }, carrot_seeds: { n: 'Carrot Seeds', i: '🌱', seed: 'carrot' },
   potato_seeds: { n: 'Potato Seeds', i: '🌱', seed: 'potato' }, pumpkin_seeds: { n: 'Pumpkin Seeds', i: '🌱', seed: 'pumpkin' },
@@ -51,8 +62,45 @@ export const ITEMS = {
   fishing_rod: T('Fishing Rod', '🎣', 'rod', 0, 1, 60), torch: T('Torch', '🔥', 'torch', 0, 2, 300),
   waterskin: { n: 'Waterskin', i: '🫗', dur: 5, empty: true, tool: 'water' },
   bandage: { n: 'Bandage', i: '🩹', heal: 35 },
-  leather_tunic: { n: 'Leather Tunic', i: '🦺', armor: 0.25 }, iron_armor: { n: 'Iron Armor', i: '🛡️', armor: 0.5 },
+  wood_staff: T('Wooden Staff', '🪄', 'staff', 0, 4, 150, 14), iron_spear: T('Iron Spear', '🔱', 'spear', 0, 10, 200, 3.8),
+  steel_sword: T('Steel Sword', '⚔️', 'sword', 0, 17, 320, 3.2), steel_spear: T('Steel Spear', '🔱', 'spear', 0, 16, 320, 3.8),
+  longbow: T('Longbow', '🏹', 'bow', 0, 14, 260), runed_staff: T('Runed Staff', '🔮', 'staff', 0, 7, 300, 14),
+  // armor
+  cloth_hood: A('Cloth Hood', '🎓', 'head', 'cloth'), cloth_robe: A('Cloth Robe', '🥼', 'chest', 'cloth'), cloth_pants: A('Cloth Leggings', '🩳', 'legs', 'cloth'),
+  leather_cap: A('Leather Cap', '🧢', 'head', 'leather'), leather_tunic: A('Leather Tunic', '🦺', 'chest', 'leather'), leather_pants: A('Leather Trousers', '👖', 'legs', 'leather'),
+  iron_helm: A('Iron Helm', '🪖', 'head', 'plate'), iron_armor: A('Iron Breastplate', '🛡️', 'chest', 'plate'), iron_greaves: A('Iron Greaves', '🦿', 'legs', 'plate'),
+  silk_hood: A('Silk Hood', '🎓', 'head', 'cloth', 2), silk_robe: A('Silk Robe', '🥼', 'chest', 'cloth', 2), silk_pants: A('Silk Leggings', '🩳', 'legs', 'cloth', 2),
+  hard_cap: A('Hardened Cap', '🧢', 'head', 'leather', 2), hard_tunic: A('Hardened Tunic', '🦺', 'chest', 'leather', 2), hard_pants: A('Hardened Trousers', '👖', 'legs', 'leather', 2),
+  steel_helm: A('Steel Helm', '🪖', 'head', 'plate', 2), steel_armor: A('Steel Breastplate', '🛡️', 'chest', 'plate', 2), steel_greaves: A('Steel Greaves', '🦿', 'legs', 'plate', 2),
+  // bags add inventory slots while worn
+  satchel: { n: 'Leather Satchel', i: '👝', slot: 'bag', bag: 8 }, pack: { n: "Traveler's Pack", i: '🎒', slot: 'bag', bag: 16 },
 };
+for (const k of ['stone_spear', 'iron_sword', 'bow', 'wood_staff', 'iron_spear', 'steel_sword', 'steel_spear', 'longbow', 'runed_staff']) { ITEMS[k].gear = true; ITEMS[k].base = { dmg: ITEMS[k].dmg }; if (k.startsWith('steel') || k === 'longbow' || k === 'runed_staff') ITEMS[k].tr = 2; }
+
+// ---- classes, stats, zones ----
+export const QUAL = [['Common', '#d9d2c2'], ['Fine', '#6fd36f'], ['Superior', '#5aa9ff'], ['Epic', '#c77dff']];
+export const STAT_N = { dmg: 'Damage', arm: 'Armor', hp: 'Health', pow: 'Power', mend: 'Healing', speed: 'Speed' };
+// your class follows the weapon in your hand: [name, role, icon, ability]
+export const CLASSES = { sword: ['Guardian', 'Tank', '🛡️', 'Taunt'], spear: ['Striker', 'Melee DPS', '⚔️', 'Power Strike'], bow: ['Ranger', 'Ranged DPS', '🏹', 'Aimed Shot'], staff: ['Mender', 'Healer', '✨', 'Group Heal'] };
+export const ABIL_CD = { sword: 12, spear: 8, bow: 8, staff: 20 };
+export const WSKILL = { sword: 'melee', spear: 'melee', bow: 'archery', staff: 'healing' };
+export const SET_BONUS = { plate: ['hp', 30, 'Plate set: +30 Health'], leather: ['pow', 10, 'Leather set: +10% Power'], cloth: ['mend', 15, 'Cloth set: +15% Healing'] };
+export const combatLevel = sk => Math.max(sk.melee?.l || 1, sk.archery?.l || 1, sk.defense?.l || 1, sk.healing?.l || 1);
+export const zoneLevel = dist => Math.max(1, Math.min(10, 1 + Math.floor(dist / 45)));       // monsters get one level tougher every 45 m from the starting meadow
+export const ZONES = [[90, 'Home Meadows'], [180, 'Greenwood'], [270, 'Wildwood'], [360, 'Highlands'], [1e9, 'Far Reaches']];
+export const zoneName = dist => ZONES.find(z => dist < z[0])[1];
+export const conColor = (mob, me) => { const d = mob - me; return d < -2 ? '#9a9a9a' : d === -2 ? '#4caf50' : d === -1 ? '#4a90e2' : d === 0 ? '#ffffff' : d === 1 ? '#f5d142' : '#e5484d'; };
+export const gearSt = it => (it && (it.st || ITEMS[it.id]?.base)) || {};
+export function calcStats(equip, skills, buff, held) {
+  const s = { arm: 0, hp: 100 + 4 * ((skills.defense?.l || 1) - 1), pow: 0, mend: 0, speed: 0, set: null }, mats = {};
+  for (const k of ['head', 'chest', 'legs']) { const it = equip[k]; if (!it || !ITEMS[it.id]) continue; const st = gearSt(it); for (const a in st) if (a in s) s[a] += st[a]; const m = ITEMS[it.id].mat; mats[m] = (mats[m] || 0) + 1; }
+  for (const m in mats) if (mats[m] === 3) { s.set = m; s[SET_BONUS[m][0]] += SET_BONUS[m][1]; }
+  if (held && ITEMS[held.id]?.gear) { const st = gearSt(held); for (const a in st) if (a !== 'dmg' && a in s) s[a] += st[a]; }
+  if (buff && buff.until > Date.now() && ITEMS[buff.id]?.buff) { const st = ITEMS[buff.id].buff.st; for (const a in st) s[a] += st[a]; }
+  s.arm = Math.min(70, s.arm); return s;
+}
+export const UPGRADE = { 2: { plank: 10, iron_bar: 4 }, 3: { plank: 20, steel_bar: 6 } };       // cost to raise a crafting station to that tier (+5 storage each)
+
 for (const k in ITEMS) { if (ITEMS[k].n.includes('Iron') && ITEMS[k].tool) ITEMS[k].tier = 'iron'; }
 
 // World resource nodes.  pick:true = gather with E, otherwise swing the right tool at it.
@@ -75,13 +123,16 @@ export const NODES = {
   wild_corn: { n: 'Wild Corn', pick: true, verb: 'Pick', skill: 'foraging', xp: 8, respawn: 400, drops: [['corn', 1, 2, 1], ['corn_seeds', 1, 2, 1]] },
 };
 
-// mode: flee = runs away, defend = fights back if hit, hunt = attacks at night (unless PEACEFUL)
+// mode: flee = runs away, defend = fights back if hit, hunt = attacks players (unless PEACEFUL). minL = lowest zone level it lives in.
+// Stats are for level 1; health, damage and xp scale up with the zone level where it spawns.
 export const ANIMALS = {
-  rabbit: { n: 'Rabbit', hp: 6, walk: 1.6, run: 6, sense: 7, mode: 'flee', xp: 10, count: 16, biomes: ['meadow'], drops: [['raw_meat', 1, 1, 1], ['hide', 1, 1, .5]] },
-  fowl: { n: 'Wild Hen', hp: 4, walk: 1.2, run: 4.5, sense: 6, mode: 'flee', xp: 8, count: 14, biomes: ['meadow', 'forest'], drops: [['raw_meat', 1, 1, 1], ['feather', 2, 4, 1]] },
-  deer: { n: 'Deer', hp: 18, walk: 1.8, run: 7, sense: 11, mode: 'flee', xp: 22, count: 12, biomes: ['forest', 'meadow'], drops: [['raw_meat', 2, 3, 1], ['hide', 1, 2, 1], ['bone', 1, 2, .6]] },
+  rabbit: { n: 'Rabbit', hp: 6, walk: 1.6, run: 6, sense: 7, mode: 'flee', xp: 10, count: 22, biomes: ['meadow'], drops: [['raw_meat', 1, 1, 1], ['hide', 1, 1, .5]] },
+  fowl: { n: 'Wild Hen', hp: 4, walk: 1.2, run: 4.5, sense: 6, mode: 'flee', xp: 8, count: 18, biomes: ['meadow', 'forest'], drops: [['raw_meat', 1, 1, 1], ['feather', 2, 4, 1]] },
+  deer: { n: 'Deer', hp: 18, walk: 1.8, run: 7, sense: 11, mode: 'flee', xp: 22, count: 16, biomes: ['forest', 'meadow'], drops: [['raw_meat', 2, 3, 1], ['hide', 1, 2, 1], ['bone', 1, 2, .6]] },
   boar: { n: 'Boar', hp: 26, walk: 1.4, run: 5, sense: 0, mode: 'defend', dmg: 6, xp: 28, count: 8, biomes: ['forest'], drops: [['raw_meat', 2, 4, 1], ['hide', 1, 1, 1], ['bone', 1, 2, 1]] },
-  wolf: { n: 'Wolf', hp: 22, walk: 1.8, run: 5.6, sense: 15, mode: 'hunt', dmg: 8, xp: 35, count: 6, biomes: ['forest', 'rock'], drops: [['hide', 1, 2, 1], ['bone', 1, 2, 1], ['raw_meat', 1, 1, .5]] },
+  wolf: { n: 'Wolf', hp: 20, walk: 1.8, run: 5.6, sense: 14, mode: 'hunt', dmg: 6, xp: 35, count: 10, minL: 2, biomes: ['forest', 'rock', 'meadow'], drops: [['hide', 1, 2, 1], ['bone', 1, 2, 1], ['fang', 1, 2, .7], ['raw_meat', 1, 1, .5]] },
+  spider: { n: 'Giant Spider', hp: 16, walk: 1.6, run: 5.2, sense: 12, mode: 'hunt', dmg: 5, xp: 32, count: 10, minL: 3, biomes: ['forest'], drops: [['spider_silk', 1, 2, 1], ['fang', 1, 1, .3]] },
+  bear: { n: 'Bear', hp: 40, walk: 1.4, run: 5.4, sense: 11, mode: 'hunt', dmg: 9, xp: 60, count: 7, minL: 5, biomes: ['forest', 'rock'], drops: [['raw_meat', 3, 5, 1], ['thick_hide', 1, 2, 1], ['bone', 2, 3, 1], ['fang', 1, 2, .5]] },
 };
 
 export const CROPS = {
@@ -94,7 +145,9 @@ export const CROPS = {
 };
 
 // station: null = craft anywhere. sk/lvl = skill requirement.
-const R = (out, n, inp, station = null, lvl = 1, sk = 'crafting', xp = 8) => ({ id: out, out, n, in: inp, station, lvl, sk, xp });
+// learn:true = the recipe must first be learned from a Recipe scroll (monster loot). tier = station tier needed.
+const R = (out, n, inp, station = null, lvl = 1, sk = 'crafting', xp = 8, o = {}) => ({ id: out, out, n, in: inp, station, lvl, sk, xp, ...o });
+const L2 = { learn: true, tier: 2 };
 export const RECIPES = [
   R('rope', 1, { fiber: 3 }), R('stone_axe', 1, { stick: 2, stone: 2, fiber: 2 }, null, 1, 'crafting', 15),
   R('stone_pickaxe', 1, { stick: 2, stone: 3, fiber: 2 }, null, 1, 'crafting', 15), R('hammer', 1, { stick: 1, stone: 2, fiber: 1 }, null, 1, 'crafting', 15),
@@ -111,22 +164,38 @@ export const RECIPES = [
   R('iron_bar', 1, { iron_ore: 2, coal: 1 }, 'furnace', 3, 'crafting', 15), R('brick', 2, { clay: 2, wood: 1 }, 'furnace', 2, 'crafting', 8),
   R('nails', 4, { iron_bar: 1 }, 'anvil', 4), R('iron_axe', 1, { iron_bar: 2, stick: 2 }, 'anvil', 6, 'crafting', 40),
   R('iron_pickaxe', 1, { iron_bar: 3, stick: 2 }, 'anvil', 6, 'crafting', 40), R('iron_sword', 1, { iron_bar: 3, stick: 1, leather: 1 }, 'anvil', 8, 'crafting', 45),
-  R('iron_armor', 1, { iron_bar: 6, leather: 2 }, 'anvil', 12, 'crafting', 60),
+  R('iron_armor', 1, { iron_bar: 6, leather: 2 }, 'anvil', 10, 'crafting', 60), R('iron_helm', 1, { iron_bar: 3 }, 'anvil', 8, 'crafting', 40),
+  R('iron_greaves', 1, { iron_bar: 4 }, 'anvil', 9, 'crafting', 45), R('iron_spear', 1, { iron_bar: 2, stick: 3 }, 'anvil', 6, 'crafting', 40),
   R('cloth', 1, { flax: 3 }, 'loom', 3, 'crafting', 10),
+  R('cloth_hood', 1, { cloth: 3 }, 'loom', 3, 'crafting', 25), R('cloth_robe', 1, { cloth: 5, rope: 1 }, 'loom', 4, 'crafting', 35), R('cloth_pants', 1, { cloth: 4 }, 'loom', 4, 'crafting', 30),
+  R('leather_cap', 1, { leather: 2 }, 'workbench', 3, 'crafting', 25), R('leather_pants', 1, { leather: 3 }, 'workbench', 4, 'crafting', 30),
+  R('wood_staff', 1, { stick: 4, rope: 1, feather: 2 }, 'workbench', 2, 'crafting', 20), R('satchel', 1, { leather: 4, rope: 2 }, 'workbench', 4, 'crafting', 35),
+  R('hunters_feast', 1, { raw_meat: 2, pumpkin: 1, corn: 1, carrot: 1 }, 'campfire', 12, 'cooking', 40),
+  R('steel_bar', 1, { iron_bar: 2, coal: 2 }, 'furnace', 10, 'crafting', 25, { tier: 2 }),
+  // tier 2: learned from recipe scrolls
+  R('silk_hood', 1, { spider_silk: 3, cloth: 2 }, 'loom', 12, 'crafting', 60, L2), R('silk_robe', 1, { spider_silk: 5, cloth: 3 }, 'loom', 12, 'crafting', 80, L2), R('silk_pants', 1, { spider_silk: 4, cloth: 2 }, 'loom', 12, 'crafting', 70, L2),
+  R('hard_cap', 1, { thick_hide: 2, leather: 2 }, 'workbench', 12, 'crafting', 60, L2), R('hard_tunic', 1, { thick_hide: 4, leather: 3 }, 'workbench', 12, 'crafting', 80, L2), R('hard_pants', 1, { thick_hide: 3, leather: 2 }, 'workbench', 12, 'crafting', 70, L2),
+  R('steel_helm', 1, { steel_bar: 3 }, 'anvil', 14, 'crafting', 60, L2), R('steel_armor', 1, { steel_bar: 6, leather: 2 }, 'anvil', 14, 'crafting', 80, L2), R('steel_greaves', 1, { steel_bar: 4 }, 'anvil', 14, 'crafting', 70, L2),
+  R('steel_sword', 1, { steel_bar: 3, leather: 1, fang: 2 }, 'anvil', 12, 'crafting', 70, L2), R('steel_spear', 1, { steel_bar: 2, stick: 3, fang: 2 }, 'anvil', 12, 'crafting', 70, L2),
+  R('longbow', 1, { stick: 4, rope: 2, fang: 2, spider_silk: 2 }, 'workbench', 12, 'crafting', 70, L2), R('runed_staff', 1, { stick: 4, spider_silk: 3, fang: 1 }, 'loom', 12, 'crafting', 70, L2),
+  R('pack', 1, { thick_hide: 4, leather: 4, rope: 3 }, 'workbench', 10, 'crafting', 60, L2),
 ];
+// every learnable recipe has a scroll item that monsters can drop
+export const SCROLLS = [];
+for (const r of RECIPES) if (r.learn) { ITEMS['r_' + r.id] = { n: 'Recipe: ' + ITEMS[r.out].n, i: '📜', learn: r.id }; SCROLLS.push('r_' + r.id); }
 export const STATION_NAMES = { workbench: 'Workbench', campfire: 'Campfire', furnace: 'Furnace', anvil: 'Anvil', loom: 'Loom' };
 
 // kind: place = free-standing, foundation/wall/floor/roof/stairs = snaps to the 4m building grid.
 const B = (n, i, cat, kind, cost, lvl = 1, o = {}) => ({ n, i, cat, kind, cost, lvl, ...o });
 export const STRUCTS = {
-  campfire: B('Campfire', '🔥', 'Camp', 'place', { stone: 5, wood: 3 }, 1, { station: 'campfire', r: .7, free: true }),
-  workbench: B('Workbench', '🛠️', 'Camp', 'place', { wood: 10, stone: 4 }, 1, { station: 'workbench', r: .9 }),
+  campfire: B('Campfire', '🔥', 'Camp', 'place', { stone: 5, wood: 3 }, 1, { station: 'campfire', store: 10, r: .7, free: true }),
+  workbench: B('Workbench', '🛠️', 'Camp', 'place', { wood: 10, stone: 4 }, 1, { station: 'workbench', store: 10, r: .9 }),
   chest: B('Storage Chest', '📦', 'Camp', 'place', { plank: 8 }, 1, { r: .6 }),
   bed: B('Bed', '🛏️', 'Camp', 'place', { plank: 8, fiber: 6, hide: 2 }, 1, { r: .9 }),
   torch_post: B('Torch Post', '🕯️', 'Camp', 'place', { stick: 2, fiber: 2 }, 1, { r: .2 }),
-  furnace: B('Furnace', '🏭', 'Camp', 'place', { stone: 20, clay: 6 }, 3, { station: 'furnace', r: 1 }),
-  anvil: B('Anvil', '⚒️', 'Camp', 'place', { iron_bar: 4, wood: 4 }, 4, { station: 'anvil', r: .7 }),
-  loom: B('Loom', '🧶', 'Camp', 'place', { plank: 12, rope: 4 }, 3, { station: 'loom', r: .9 }),
+  furnace: B('Furnace', '🏭', 'Camp', 'place', { stone: 20, clay: 6 }, 3, { station: 'furnace', store: 10, r: 1 }),
+  anvil: B('Anvil', '⚒️', 'Camp', 'place', { iron_bar: 4, wood: 4 }, 4, { station: 'anvil', store: 10, r: .7 }),
+  loom: B('Loom', '🧶', 'Camp', 'place', { plank: 12, rope: 4 }, 3, { station: 'loom', store: 10, r: .9 }),
   well: B('Well', '⛲', 'Camp', 'place', { stone: 20, plank: 4, rope: 2 }, 4, { r: 1.2 }),
   farm_plot: B('Farm Plot', '🌱', 'Farm', 'place', { fiber: 2 }, 1, { needs: 'hoe', flat: true }),
   fence: B('Fence', '🚧', 'Farm', 'wall', { stick: 4 }, 1, { h: 1.2 }),

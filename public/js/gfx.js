@@ -57,7 +57,7 @@ export const NODE_H = { oak: 3, pine: 3, birch: 3, rock: 1.2, iron: 1.2, coal: 1
 // ---- characters ----
 export function makeCharacter(look, armor) {
   const g = new THREE.Group(), { shirt, hair, skin } = look, pants = '#3b4a6b';
-  const torsoC = armor === 'iron_armor' ? '#aeb6bf' : armor === 'leather_tunic' ? '#8a5a33' : shirt;
+  const torsoC = { plate: '#aeb6bf', leather: '#8a5a33', cloth: '#b7a3dc' }[armor] || shirt;       // armor = material of the chest piece
   const body = new THREE.Group(); g.add(body);
   body.add(M([P(box(.62, .72, .36), torsoC, 0, 1.16, 0), P(box(.64, .12, .38), '#4a3221', 0, .82, 0)]));
   const head = M([P(box(.46, .46, .46), skin, 0, 0, 0), P(box(.5, .2, .5), hair, 0, .2, -.02), P(box(.5, .34, .14), hair, 0, 0, -.2), P(box(.07, .09, .03), '#22252b', .11, .02, .235), P(box(.07, .09, .03), '#22252b', -.11, .02, .235), P(box(.14, .03, .03), '#a8443a', 0, -.12, .235)]);
@@ -77,6 +77,7 @@ const HELD = {
   spear: () => [P(cyl(.025, .025, 1.7, 5), '#7a5536', 0, .5, 0), P(cone(.07, .3, 4), '#c9ced3', 0, 1.5, 0)],
   sword: () => [P(box(.05, .2, .05), '#5a3d28', 0, 0, 0), P(box(.26, .05, .07), '#c9a23a', 0, .12, 0), P(box(.08, .85, .03), '#d7dde2', 0, .57, 0)],
   bow: () => [P(new THREE.TorusGeometry(.5, .025, 4, 10, Math.PI), '#7a5536', 0, .15, 0, 0, Math.PI / 2, -Math.PI / 2), P(box(.012, 1, .012), '#e8e4d8', 0, .15, 0)],
+  staff: c => [P(cyl(.03, .035, 1.7, 5), '#7a5536', 0, .45, 0), P(ico(.11), c === '#d7dde2' ? '#7fd4ff' : '#9be37a', 0, 1.38, 0), P(cone(.07, .14, 4), '#7a5536', 0, 1.24, 0)],
   rod: () => [P(cyl(.015, .03, 1.9, 5), '#9a7a4a', 0, .7, .3, .45, 0, 0), P(box(.01, .9, .01), '#e8e4d8', 0, 1.1, 1.05)],
   torch: () => [P(cyl(.03, .04, .6, 5), '#7a5536', 0, .2, 0)],
   water: () => [P(ico(.14), '#8a5a33', 0, 0, .05, 0, 0, 0, 1, 1.3, .7)],
@@ -114,6 +115,9 @@ const AN = {
   boar: { b: [.55, .55, 1.05], lh: .32, lw: .13, c: '#5a4636', h: [.36, .36, .4], x: (y, z) => [P(cone(.035, .16, 4), '#f1ead9', .14, y - .08, z + .2, -.6), P(cone(.035, .16, 4), '#f1ead9', -.14, y - .08, z + .2, -.6), P(box(.2, .16, .12), '#7a6350', 0, y - .06, z + .24)] },
   wolf: { b: [.4, .45, 1.05], lh: .5, lw: .1, c: '#7d848c', h: [.3, .28, .4], hy: .15, x: (y, z) => [P(cone(.07, .16, 4), '#5f666e', .1, y + .2, z - .12), P(cone(.07, .16, 4), '#5f666e', -.1, y + .2, z - .12), P(box(.1, .1, .5), '#5f666e', 0, y - .1, -z - .9, .5), P(box(.05, .04, .02), '#ffd84a', .08, y + .04, z + .21), P(box(.05, .04, .02), '#ffd84a', -.08, y + .04, z + .21)] },
 };
+AN.spider = { b: [.7, .32, .8], lh: .3, lw: .06, c: '#3a2f3f', h: [.34, .28, .3], x: (y, z) => [P(box(.06, .06, .02), '#e5484d', .08, y + .04, z + .16), P(box(.06, .06, .02), '#e5484d', -.08, y + .04, z + .16), P(ico(.42), '#2c2431', 0, y + .05, -z - .55, 0, 0, 0, 1, .8, 1.1), ...[-1, 1].flatMap(s => [.3, 0, -.3].map(q => P(box(.5, .05, .05), '#3a2f3f', s * .55, y - .12, q, 0, 0, s * .5)))] };
+AN.bear = { b: [.8, .8, 1.5], lh: .55, lw: .2, c: '#6b4a32', h: [.5, .46, .5], hy: .1, x: (y, z) => [P(box(.12, .12, .06), '#4a3221', .18, y + .28, z - .1), P(box(.12, .12, .06), '#4a3221', -.18, y + .28, z - .1), P(box(.24, .2, .2), '#8a6a4c', 0, y - .08, z + .3), P(box(.08, .06, .04), '#22252b', 0, y - .02, z + .41)] };
+export const ANIMAL_R = { rabbit: .45, fowl: .4, deer: .8, boar: .8, wolf: .75, spider: .75, bear: 1.1 };      // radius of the level ring under each kind
 export function makeAnimal(t) {
   const a = AN[t], g = new THREE.Group(), [w, h, l] = a.b, by = a.lh + h / 2, hy = by + (a.hy || .1), hz = l / 2 + a.h[2] * .3;
   g.add(M([P(box(w, h, l), a.c, 0, by, 0), P(box(...a.h), a.c, 0, hy, hz), ...a.x(hy, hz)]));

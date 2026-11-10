@@ -33,7 +33,7 @@
   <div id="hurt"></div>
   <div id="cross"></div>
   <div id="vitals">
-    <div class="bar hp"><span>❤</span><i id="bHp"></i></div>
+    <div class="bar hp"><span>❤</span><i id="bHp"></i><em id="hpTxt"></em></div>
     <div class="bar food"><span>🍖</span><i id="bFood"></i></div>
     <div class="bar water"><span>💧</span><i id="bWater"></i></div>
     <div class="bar stam"><span>⚡</span><i id="bStam"></i></div>
@@ -49,8 +49,10 @@
   <div id="heldName"></div>
   <div id="hotbar"></div>
   <div id="buildbar" hidden></div>
-  <div id="chat"><div id="chatlog"></div><input id="chatin" maxlength="160" placeholder="Enter = chat   ·   /c message = clan chat"></div>
-  <div id="keys"><span><b>Tab</b> Bag</span> <span><b>C</b> Craft</span> <span><b>B</b> Build</span> <span><b>G</b> Clan</span> <span><b>M</b> Map</span> <span><b>Esc</b> Menu</span></div>
+  <div id="chat"><div id="chatlog"></div><input id="chatin" maxlength="160" placeholder="Enter = chat  ·  /c clan  ·  /p party"></div>
+  <div id="party"></div>
+  <div id="abil"></div>
+  <div id="keys"><span><b>Tab</b> Bag</span> <span><b>C</b> Craft</span> <span><b>B</b> Build</span> <span><b>G</b> Clan</span> <span><b>P</b> Players</span> <span><b>M</b> Map</span> <span><b>Q</b> Ability</span> <span><b>Esc</b> Menu</span></div>
 </div>
 
 <div id="panel" hidden>
@@ -58,6 +60,7 @@
   <button id="pclose" title="Close (Esc)">✕</button>
   <div id="pbody"></div>
 </div>
+<div id="osk" hidden></div>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

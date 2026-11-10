@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kinwild</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E🌲%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js" } }</script>
+<script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="login">
+  <form id="loginForm" autocomplete="off">
+    <h1>Kinwild</h1>
+    <p class="sub">Gather. Build. Farm. Survive — together.</p>
+    <label>Your name<input id="lname" maxlength="14" placeholder="e.g. Dad" required></label>
+    <label>Secret PIN<input id="lpin" type="password" maxlength="20" placeholder="pick one and remember it" required></label>
+    <div class="looks">
+      <div><span>Shirt</span><div class="sw" id="swShirt"></div></div>
+      <div><span>Hair</span><div class="sw" id="swHair"></div></div>
+      <div><span>Skin</span><div class="sw" id="swSkin"></div></div>
+    </div>
+    <button type="submit">Play</button>
+    <p id="lerr"></p>
+    <p class="fine">New name = new character. Same name + PIN brings your character back on any computer.</p>
+  </form>
+</div>
+
+<div id="hud" hidden>
+  <div id="hurt"></div>
+  <div id="cross"></div>
+  <div id="vitals">
+    <div class="bar hp"><span>❤</span><i id="bHp"></i></div>
+    <div class="bar food"><span>🍖</span><i id="bFood"></i></div>
+    <div class="bar water"><span>💧</span><i id="bWater"></i></div>
+    <div class="bar stam"><span>⚡</span><i id="bStam"></i></div>
+  </div>
+  <div id="right">
+    <canvas id="mini" width="170" height="170"></canvas>
+    <div id="clock"></div>
+    <div id="quest"></div>
+  </div>
+  <div id="toasts"></div>
+  <div id="feed"></div>
+  <div id="prompt"></div>
+  <div id="heldName"></div>
+  <div id="hotbar"></div>
+  <div id="buildbar" hidden></div>
+  <div id="chat"><div id="chatlog"></div><input id="chatin" maxlength="160" placeholder="Enter = chat   ·   /c message = clan chat"></div>
+  <div id="keys"><span><b>Tab</b> Bag</span> <span><b>C</b> Craft</span> <span><b>B</b> Build</span> <span><b>G</b> Clan</span> <span><b>M</b> Map</span> <span><b>H</b> Help</span></div>
+</div>
+
+<div id="panel" hidden>
+  <div id="tabs"></div>
+  <button id="pclose" title="Close (Esc)">✕</button>
+  <div id="pbody"></div>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

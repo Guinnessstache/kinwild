@@ -1,0 +1,19 @@
+# Render Blueprint: New > Blueprint > pick this repo. Paste your Neon connection string when asked for DATABASE_URL.
+services:
+  - type: web
+    name: kinwild
+    runtime: node
+    plan: free
+    region: virginia
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false        # your Neon "pooled" connection string
+      - key: PEACEFUL
+        value: "0"         # "1" = wolves never hunt players
+      - key: DAY_MINUTES
+        value: "20"        # real minutes per in-game day

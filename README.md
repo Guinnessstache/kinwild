@@ -49,7 +49,7 @@ Each player picks a name and a PIN. Same name + PIN brings the character back on
 | 1-8 or wheel | Hotbar |
 | Tab / C / B / G / M / H | Bag and skills / Craft / Build / Clan / Map / Help |
 | X | Sneak (animals notice you from half as far) |
-| R / Z | In build mode: turn the piece / change floor level |
+| R / Z | In build mode: turn the piece / raise the starting level. Walls stack on their own up to 3 high, and roofs land on the highest wall |
 | K / T | With the hammer held: K takes apart the highlighted piece (half the materials back), T steps to the next piece in reach |
 | Enter | Chat. `/c hello` talks to your clan only |
 | Esc | Menu: graphics, sound volume, look speed, button hints, log out |
@@ -67,7 +67,7 @@ The "Next step" box walks new players through 19 steps from punching a tree to f
 - **Hunting and fishing**: rabbits, wild hens, deer, boar (fight back), wolves (hunt at night, never near a fire). Spear, sword, bow and arrows, fishing rod.
 - **Farming**: farm plots, 6 crops, watering to speed growth, harvests that return seeds.
 - **Crafting**: 32 recipes across hand, workbench, campfire, furnace, anvil and loom. Stone and iron tool tiers, armor, 9 cooked meals.
-- **Building**: 24 pieces. Snap-together wood and stone foundations, walls, doors, windows, upper floors, stairs and roofs, plus campfire, workbench, chest, bed, furnace, anvil, loom, well, torch post, fences.
+- **Building**: 26 pieces, including gables that close the triangle at each roof end. Snap-together wood and stone foundations, walls, doors, windows, upper floors, stairs and roofs, plus campfire, workbench, chest, bed, furnace, anvil, loom, well, torch post, fences.
 - **Clans**: create, invite (works for offline players), leader/officer/member roles, clan notice, clan chat, clan colour and tag over names, shared chests/doors/farms/buildings, clan-mates on the map, clan XP and level, clan banner as a shared home point.
 - **Family-friendly rules**: no PvP, nobody else can open or take apart your things unless they are in your clan, and getting knocked out sends you home with all your items.
 

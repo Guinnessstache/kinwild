@@ -96,7 +96,7 @@ export function createUI(S, act) {
     return r ? `Make ${ITEMS[k].n} ${r.station ? `at a ${STATION_NAMES[r.station]}` : 'by hand'} (C) from ${Object.keys(r.in).map(i => ITEMS[i].n).join(' + ')}` : `Gather more ${ITEMS[k].n}`;
   }
   function build() {
-    const lv = S.me.skills.building.l; let h = `<p style="margin-top:0;color:var(--dim)">Pick something, aim where you want it, then place it. Each card lists what it costs and how much you have (green = enough, red = short). You need a Building Hammer in your bag (Building Lv ${lv}).</p>`;
+    const lv = S.me.skills.building.l; let h = `<p style="margin-top:0;color:var(--dim)">Pick something, aim where you want it, then place it. Each card lists what it costs and how much you have (green = enough, red = short). You need a Building Hammer in your bag (Building Lv ${lv}).<br>Walls stack by themselves up to 3 high: place a wall where one already stands and it goes on top. Roofs land on the highest wall around them, and a Gable closes the open triangle at each end of a roof.</p>`;
     for (const cat of ['Camp', 'Farm', 'Building', 'Clan']) {
       h += `<h3>${cat}</h3><div class="cards">`;
       for (const [id, d] of Object.entries(STRUCTS)) if (d.cat === cat) {
@@ -141,7 +141,7 @@ export function createUI(S, act) {
     <p><b>Skills</b> grow by doing the thing. Higher levels give bonus loot, unlock recipes and building pieces.</p>
     <p><b>Food & water:</b> cook meat on a campfire, drink at lakes with E, and build a Well near home.</p>
     <p><b>Farming:</b> craft a Hoe → place a Farm Plot → hold seeds and click the plot. A full waterskin makes it grow faster.</p>
-    <p><b>Building:</b> foundations first, then walls, a door and a roof. Stairs + upper floors make a second storey.</p>
+    <p><b>Building:</b> foundations first, then walls, a door and a roof. Walls stack up to 3 high (place again on the same spot), roofs sit on the highest wall, and a Gable fills the triangle at each roof end. Stairs + upper floors make more storeys.</p>
     <p><b>Night:</b> wolves roam the deep woods after dark but never come near a campfire or torch post. Sleep spots: a Bed sets where you wake up.</p>
     <p><b>Clans:</b> press G. Clan-mates share everything you build.</p>
     <p><b>If you get knocked out</b> you wake up at your bed with all your stuff.</p></div>

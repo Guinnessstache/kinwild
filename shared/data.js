@@ -19,6 +19,7 @@ export const SKILLS = {
 const SVG = b => `<svg class="svgi" viewBox="0 0 24 24" width="1em" height="1em">${b}</svg>`;
 const IC_HOE = SVG('<path d="M4.5 21.5 16 6" stroke="#8a5a33" stroke-width="2.6" stroke-linecap="round"/><path d="M13.2 3.2 20.8 8.8 21.6 15.2 17.2 13.6 15.6 9.2 11.6 6z" fill="#c3cad1" stroke="#59616a" stroke-width="1.1" stroke-linejoin="round"/>');
 const IC_WOODWALL = SVG('<rect x="2" y="3.5" width="20" height="17" rx="1.5" fill="#b9814f" stroke="#5e3d22" stroke-width="1.4"/><path d="M7 3.5v17M12 3.5v17M17 3.5v17" stroke="#5e3d22" stroke-width="1.2"/><path d="M2.5 8.5h19M2.5 15.5h19" stroke="#8a5a33" stroke-width="1.6"/>');
+const IC_GABLE = c => SVG(`<path d="M2 20 12 4 22 20z" fill="${c}" stroke="#3d2a18" stroke-width="1.4" stroke-linejoin="round"/><path d="M7 20v-8M12 20V4M17 20v-8" stroke="#3d2a18" stroke-width="1" opacity=".7"/>`);
 const T = (n, i, tool, pow, dmg, dur, reach = 3) => ({ n, i, tool, pow, dmg, dur, reach });
 const F = (n, i, h, t = 0, hp = 0, cooked = false) => ({ n, i, food: { h, t, hp }, cooked });
 export const ITEMS = {
@@ -136,11 +137,13 @@ export const STRUCTS = {
   wood_floor: B('Wood Ceiling / Upper Floor', '⬛', 'Building', 'floor', { plank: 4 }, 2),
   wood_stairs: B('Wood Stairs', '🪜', 'Building', 'stairs', { plank: 6 }, 3),
   wood_roof: B('Thatch Roof', '🛖', 'Building', 'roof', { plank: 2, fiber: 6 }, 2),
+  wood_gable: B('Wood Gable (roof end)', IC_GABLE('#b9814f'), 'Building', 'wall', { plank: 2 }, 2, { h: 1.5, gable: true }),
   stone_foundation: B('Stone Foundation', '⬜', 'Building', 'foundation', { stone: 12 }, 5),
   stone_wall: B('Stone Wall', '🧱', 'Building', 'wall', { stone: 6, brick: 2 }, 6, { h: 3 }),
   stone_doorway: B('Stone Door', '🚪', 'Building', 'wall', { stone: 5, brick: 2, plank: 2 }, 6, { h: 3, door: true }),
   stone_window: B('Stone Window', '🪟', 'Building', 'wall', { stone: 4, brick: 2 }, 7, { h: 3 }),
   stone_roof: B('Slate Roof', '🏠', 'Building', 'roof', { stone: 4, plank: 2 }, 8),
+  stone_gable: B('Stone Gable (roof end)', IC_GABLE('#a3a9ae'), 'Building', 'wall', { stone: 3, brick: 1 }, 6, { h: 1.5, gable: true }),
   clan_banner: B('Clan Banner', '🚩', 'Clan', 'place', { plank: 4, fiber: 8 }, 1, { clan: true, r: .2 }),
 };
 

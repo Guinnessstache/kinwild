@@ -144,6 +144,11 @@ export function makeStruct(s, clanColor) {
     case 'foundation': add(stone ? [P(box(4, 3.2, 4), STONE, 0, -1.6, 0), P(box(4.1, .2, 4.1), STONE2, 0, -.1, 0)] : [P(box(3.9, 3, 3.9), DARK, 0, -1.6, 0), P(box(4, .2, 4), PLANK, 0, -.1, 0), ...[-1.5, -.5, .5, 1.5].map(x => P(box(.04, .02, 4), DARK, x, .01, 0))]); break;
     case 'wall':
       if (t === 'fence') { add([P(box(.16, 1.2, .16), DARK, -2, .6, 0), P(box(.16, 1.2, .16), DARK, 2, .6, 0), P(box(.14, 1.1, .14), DARK, 0, .55, 0), P(box(4, .12, .08), WOOD, 0, .95, 0), P(box(4, .12, .08), WOOD, 0, .5, 0)]); break; }
+      if (STRUCTS[t].gable) {      // triangle that closes the open end under a pitched roof
+        const sh = new THREE.Shape(); sh.moveTo(-2, 0); sh.lineTo(2, 0); sh.lineTo(0, 1.52); sh.closePath();
+        const tri = new THREE.ExtrudeGeometry(sh, { depth: .26, bevelEnabled: false }); tri.translate(0, 0, -.13);
+        add([P(tri, stone ? STONE : PLANK), P(box(4, .14, .32), stone ? STONE2 : WOOD, 0, .07, 0), P(box(.2, 1.4, .3), stone ? '#868c92' : DARK, 0, .72, 0)]); break;
+      }
       add(wallParts(t, stone));
       if (STRUCTS[t].door) { const d = new THREE.Group(); d.position.set(-.75, 0, 0); d.add(M([P(box(1.5, 2.45, .1), stone ? WOOD : DARK, .75, 1.23, 0), P(box(.08, .08, .2), '#d9b23a', 1.3, 1.2, 0)])); g.add(d); u.door = d; }
       break;

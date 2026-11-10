@@ -318,23 +318,35 @@ function stopBuild() { if (!S.build) return; scene.remove(S.build.ghost); S.buil
 function buildBar() {
   if (!S.build) return; const d = STRUCTS[S.build.t], p = padUI(), hint = ui.costHint(d);
   $('buildbar').hidden = false;
-  $('buildbar').innerHTML = `${d.i} <b>${d.n}</b> &nbsp; <kbd>${p ? 'RT' : 'Click'}</kbd>place <kbd>${p ? 'X' : 'R'}</kbd>turn ${d.kind !== 'place' && d.kind !== 'foundation' ? `<kbd>${p ? 'Y' : 'Z'}</kbd>floor ${S.build.lvl + 1} ` : ''}<kbd>${p ? 'B' : 'Esc'}</kbd>done<div class="need">Needs: ${ui.costHtml(d.cost)}</div>${hint ? `<div class="need hint">${hint}</div>` : ''}`;
+  $('buildbar').innerHTML = `${d.i} <b>${d.n}</b> &nbsp; <kbd>${p ? 'RT' : 'Click'}</kbd>place <kbd>${p ? 'X' : 'R'}</kbd>turn ${d.kind !== 'place' && d.kind !== 'foundation' ? `<kbd>${p ? 'Y' : 'Z'}</kbd>level ${(S.build.L ?? S.build.lvl) + 1} ` : ''}<kbd>${p ? 'B' : 'Esc'}</kbd>done<div class="need">Needs: ${ui.costHtml(d.cost)}</div>${hint ? `<div class="need hint">${hint}</div>` : ''}`;
 }
 function placement() {
-  const b = S.build, d = STRUCTS[b.t], [fx, fz] = fwd(), reach = d.kind === 'place' ? 2.6 : 4.2 + cam.pitch * 2;
+  const b = S.build, d = STRUCTS[b.t], [fx, fz] = fwd(), reach = d.kind === 'place' || d.kind === 'stairs' ? 2.6 : d.kind === 'roof' || d.kind === 'floor' ? 1.5 : 4.2 + cam.pitch * 2;      // roofs and ceilings go over the square you stand in (or are stepping into)
   const ax = me.x + fx * reach, az = me.z + fz * reach, cx = Math.round(ax / 4) * 4, cz = Math.round(az / 4) * 4;
   let base = null, bd = 11; for (const s of S.structs.values()) if (STRUCTS[s.t].kind === 'foundation') { const q = Math.hypot(s.x - cx, s.z - cz); if (q < bd && Math.abs(s.y - me.y) < 7) { bd = q; base = s.y; } }
   base ??= Math.max(heightAt(cx - 2, cz - 2), heightAt(cx + 2, cz - 2), heightAt(cx - 2, cz + 2), heightAt(cx + 2, cz + 2), .2) + .35;
+  // Pieces stack on their own: placing where a piece already is goes one level up (walls up to 3 high), and a roof
+  // lands on top of the highest wall around its square. Z still raises the starting level by hand.
+  const occ = (kind, x, y, z, r) => { for (const s of S.structs.values()) if (STRUCTS[s.t].kind === kind && Math.abs(s.x - x) < .3 && Math.abs(s.z - z) < .3 && Math.abs(s.y - y) < .5 && (kind !== 'wall' || s.r === r)) return true; return false; };
+  const wallTop = () => { let top = -1; for (const s of S.structs.values()) { const sd = STRUCTS[s.t]; if (sd.kind !== 'wall' || sd.gable || s.t === 'fence') continue; if (Math.abs(s.x - cx) + Math.abs(s.z - cz) > 2.3 || Math.abs(s.x - cx) > 2.3 || Math.abs(s.z - cz) > 2.3) continue; const L = Math.round((s.y - base) / 3); if (L >= 0 && L <= 2) top = Math.max(top, L); } return top; };
+  let L = b.lvl;
   switch (d.kind) {
     case 'foundation': return { x: cx, y: base, z: cz, r: 0 };
-    case 'wall': { const dx = ax - cx, dz = az - cz; const y = b.t === 'fence' && bd > 10 ? null : base + 3 * b.lvl; return Math.abs(dx) > Math.abs(dz) ? { x: cx + Math.sign(dx || 1) * 2, y: y ?? heightAt(cx + Math.sign(dx || 1) * 2, cz), z: cz, r: 1 } : { x: cx, y: y ?? heightAt(cx, cz + Math.sign(dz || 1) * 2), z: cz + Math.sign(dz || 1) * 2, r: 0 }; }
-    case 'floor': return { x: cx, y: base + 3 * (b.lvl + 1), z: cz, r: 0 };
-    case 'roof': return { x: cx, y: base + 3 * (b.lvl + 1), z: cz, r: b.r % 2 };
-    case 'stairs': return { x: cx, y: base + 3 * b.lvl, z: cz, r: b.r };
+    case 'wall': {
+      // snap to whichever square edge is nearest the spot 3 m in front of the player
+      const wx = me.x + fx * 3, wz = me.z + fz * 3, ex = Math.round((wx - 2) / 4) * 4 + 2, ez = Math.round((wz - 2) / 4) * 4 + 2;
+      const side = Math.abs(wx - ex) < Math.abs(wz - ez), x = side ? ex : Math.round(wx / 4) * 4, z = side ? Math.round(wz / 4) * 4 : ez, r = side ? 1 : 0;
+      if (b.t === 'fence' && bd > 10) return { x, y: heightAt(x, z), z, r };
+      const max = d.gable ? 3 : 2; while (L < max && occ('wall', x, base + 3 * L, z, r)) L++;
+      return { x, y: base + 3 * L, z, r, L };
+    }
+    case 'floor': while (L < 2 && occ('floor', cx, base + 3 * (L + 1), cz)) L++; return { x: cx, y: base + 3 * (L + 1), z: cz, r: 0, L };
+    case 'roof': L = Math.max(L, wallTop()); return { x: cx, y: base + 3 * (L + 1), z: cz, r: b.r % 2, L };
+    case 'stairs': while (L < 2 && occ('stairs', cx, base + 3 * L, cz)) L++; return { x: cx, y: base + 3 * L, z: cz, r: b.r, L };
     default: { const x = Math.round(ax * 2) / 2, z = Math.round(az * 2) / 2; return { x, y: groundAt(x, z, me.y + .5), z, r: b.r }; }
   }
 }
-function placeBuild() { const p = placement(); emit('place', { t: S.build.t, ...p }, r => { if (r?.err) ui.toast(r.err, 'bad'); else if (r?.ok) sound('place'); }); }
+function placeBuild() { const { x, y, z, r } = placement(); emit('place', { t: S.build.t, x, y, z, r }, r => { if (r?.err) ui.toast(r.err, 'bad'); else if (r?.ok) sound('place'); }); }
 
 // ---------- targeting ----------
 function nextPiece() { const l = S.hamList; if (!l || l.length < 2) return; const i = l.findIndex(o => o.s.id === (S.target?.s?.id)); S.hamSel = l[(i + 1) % l.length].s.id; sound('pick'); }
@@ -508,7 +520,7 @@ function frame() {
     // targeting + prompt
     S.target = S.build ? null : findTarget();
     if (S.target) { const t = S.target; ring.visible = true; ring.position.set(t.x, Math.max(t.y, groundAt(t.x, t.z, me.y + 2)) + .12, t.z); ring.scale.setScalar(t.r * (1 + Math.sin(time * 5) * .05)); } else ring.visible = false;
-    if (S.build) { const p = placement(), g = S.build.ghost; g.position.set(p.x, p.y, p.z); g.rotation.y = p.r * Math.PI / 2; }
+    if (S.build) { const p = placement(), g = S.build.ghost; g.position.set(p.x, p.y, p.z); g.rotation.y = p.r * Math.PI / 2; if ((p.L ?? null) !== (S.build.L ?? null)) { S.build.L = p.L; buildBar(); } }
     netT += dt; if (netT > .08) { netT = 0; const m = [+me.x.toFixed(2), +me.y.toFixed(2), +me.z.toFixed(2), +me.yaw.toFixed(2), me.mode]; const key = m.join(); if (key !== lastSent) { lastSent = key; sock.volatile.emit('mv', m); } }
     slowT += dt; if (slowT > .25) {
       slowT = 0; $('prompt').innerHTML = ui.tab ? '' : promptFor(S.target); $('bStam').style.width = S.stam + '%'; drawMini();

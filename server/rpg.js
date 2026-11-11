@@ -23,6 +23,9 @@ const methods = {
     for (let i = 0; i < q + (Math.random() < .5 ? 1 : 0); i++) { const k = pool[Math.floor(Math.random() * pool.length)]; st[k] = (st[k] || 0) + Math.max(1, Math.round(amt[k] * tm * (.7 + Math.random() * .6))); }
     const it = { id, n: 1, q, st }; if (def.dur) it.d = Math.round(def.dur * durMul * qm); return it;
   },
+  fixGear(list) {          // gear made before stats were random has none: roll it now (keeping its wear)
+    for (const it of list) if (it && ITEMS[it.id]?.gear && !it.st) { const r = this.roll(it.id); it.q = r.q; it.st = r.st; if (it.d == null && r.d != null) it.d = r.d; }
+  },
   dmgOf(p) {       // [damage, skill] for the held item
     const it = this.held(p), def = it ? ITEMS[it.id] : null, sk = WSKILL[def?.tool] || 'melee';
     return [(gearSt(it).dmg ?? def?.dmg ?? 1) * (1 + .05 * (this.lvl(p, sk) - 1)) * (1 + this.stats(p).pow / 100), sk];

@@ -4,6 +4,7 @@ import { ITEMS, RECIPES, STRUCTS, NODES, ANIMALS, CROPS, SKILLS, QUESTS, STATION
 import { install, stk, distSpawn } from './rpg.js';
 import { heightAt, biomeAt, genNodes, zoneAt, SPAWN, HALF } from '../shared/terrain.js';
 const EDGE = HALF - 40;      // how far out anything may go
+const LEASH = 32;            // a monster gives up the chase this far from where it lives
 
 const INV = 32, STACK = 99;
 const PEACEFUL = process.env.PEACEFUL === '1';
@@ -32,7 +33,7 @@ export class Game {
     }
     this.clans = (await this.db.load('clans')) || {};
     this.perms = (await this.db.load('perms')) || {};
-    for (const st of this.structs.values()) this.clearNodes(st);       // nothing grows through floors (also after a map change)
+    for (const st of this.structs.values()) { this.clearNodes(st); if (st.d?.inv) this.fixGear(st.d.inv); }       // nothing grows through floors (also after a map change)
     for (const t in ANIMALS) for (let i = 0; i < ANIMALS[t].count; i++) this.spawnAnimal(t, true);
     setInterval(() => this.tick(), 100);
     setInterval(() => this.slow(), 1000);
@@ -93,6 +94,7 @@ export class Game {
     doc.done ||= {}; doc.known ||= {}; doc.equip ||= {};
     if (typeof doc.equip.body === 'string') doc.equip.chest = { id: doc.equip.body, n: 1 }; delete doc.equip.body;      // saves from before armor had slots
     const size = INV + (ITEMS[doc.equip.bag?.id]?.bag || 0); while (doc.inv.length < size) doc.inv.push(null);
+    this.fixGear(doc.inv); this.fixGear(Object.values(doc.equip));
     const old = this.players.get(pid);
     if (old) { old.socket.emit('kick', 'You logged in somewhere else'); this.players.delete(pid); old.socket.disconnect(true); }
     const p = { ...doc, id: pid, socket, y: heightAt(doc.x, doc.z), r: 0, a: 0, sel: 0, lastSwing: 0, chest: null, fishing: null, clan: this.clanOf(pid), cd: {}, party: null, trade: null, voice: false, perm: this.perms[pid] || 'clan' };
@@ -268,7 +270,7 @@ export class Game {
       const L = zone.lo + Math.floor(Math.random() * (zone.hi - zone.lo + 1)); if (L < (d.minL || 1) || distSpawn(x, z) < 12) continue;      // level comes from the zone it lives in
       if (!anywhere) { let close = false; for (const p of this.players.values()) if (Math.hypot(p.x - x, p.z - z) < 45) close = true; if (close) continue; }
       const max = Math.round(d.hp * (1 + .6 * (L - 1)));
-      const a = { id: this.nextId++, t, x, z, y: heightAt(x, z), L, hp: max, max, ang: Math.random() * 6.28, spd: 0, tw: Math.random() * 4, target: null, until: 0, atk: 0 };
+      const a = { id: this.nextId++, t, x, z, hx: x, hz: z, y: heightAt(x, z), L, hp: max, max, ang: Math.random() * 6.28, spd: 0, tw: Math.random() * 4, target: null, until: 0, atk: 0 };
       this.animals.set(a.id, a); this.dirty = true;
       if (!anywhere) this.io.to('game').emit('a+', this.apub(a));
       return;
@@ -277,7 +279,9 @@ export class Game {
   isNight() { return this.time < 0.22 || this.time > 0.79; }
   nearFire(p) { for (const s of this.structs.values()) if ((s.t === 'campfire' || s.t === 'torch_post') && Math.hypot(s.x - p.x, s.z - p.z) < 12) return true; return false; }
   hitAnimal(a, dmg, p, sk = 'melee') {
-    const d = ANIMALS[a.t], now = Date.now(); dmg *= lvlMods(a.L - this.plvl(p)).youHit; a.hp -= dmg;
+    const d = ANIMALS[a.t], now = Date.now();
+    if (a.ret) { this.fx('hit', a.x, a.y + .6, a.z, { c: '#bbbbbb' }); return this.toast(p, 'It is running home — it can’t be hurt until it gets there'); }      // evading
+    dmg *= lvlMods(a.L - this.plvl(p)).youHit; a.hp -= dmg;
     this.fx('hit', a.x, a.y + .6, a.z, { c: '#c0392b' });
     if (!(a.taunt > now)) { a.target = p.id; a.until = now + 14000; }
     const grey = a.L < this.plvl(p) - 2 ? .1 : 1;          // far weaker monsters teach almost nothing
@@ -318,7 +322,14 @@ export class Game {
   tickAnimals(dt) {
     const now = Date.now(), night = this.isNight(), P = [...this.players.values()];
     for (const a of this.animals.values()) {
-      const d = ANIMALS[a.t];
+      const d = ANIMALS[a.t]; a.hx ??= a.x; a.hz ??= a.z;
+      const home = Math.hypot(a.x - a.hx, a.z - a.hz);
+      // Leash: a monster only chases so far from where it lives, then runs home, ignoring everyone, and heals up there
+      if (a.ret) {
+        if (home < 2.5) { a.ret = false; a.spd = 0; a.tw = 2; if (a.hp < a.max) { a.hp = a.max; this.io.to('game').emit('ah', [a.id, 100]); } }
+        else { a.ang = Math.atan2(a.hx - a.x, a.hz - a.z); a.spd = d.run * 1.15; const nx = a.x + Math.sin(a.ang) * a.spd * dt, nz = a.z + Math.cos(a.ang) * a.spd * dt; if (heightAt(nx, nz) >= 0.4) { a.x = nx; a.z = nz; a.y = heightAt(nx, nz); } else { a.x = a.hx; a.z = a.hz; a.y = heightAt(a.x, a.z); } }
+        continue;
+      }
       let np = null, nd = 1e9; for (const p of P) { const q = Math.hypot(p.x - a.x, p.z - a.z); if (q < nd) { nd = q; np = p; } }
       let tgt = a.target && now < a.until ? this.players.get(a.target) : null; if (!tgt) a.target = null;
       let mode = 'wander';
@@ -332,11 +343,12 @@ export class Game {
       if (mode === 'flee') { a.ang = Math.atan2(a.x - tgt.x, a.z - tgt.z) + Math.sin(now / 400 + a.id) * 0.5; a.spd = d.run; }
       else if (mode === 'chase') {
         const q = Math.hypot(tgt.x - a.x, tgt.z - a.z);
+        if (home > LEASH) { a.target = null; a.ret = true; a.taunt = 0; continue; }
         if (q > 45 || (d.mode === 'hunt' && this.nearFire(tgt) && !a.target)) { a.target = null; a.spd = 0; }
         else { a.ang = Math.atan2(tgt.x - a.x, tgt.z - a.z); a.spd = q > 1.5 ? d.run : 0;
           if (q < 2 && now > a.atk) { a.atk = now + 1400; this.hurt(tgt, d.dmg * (1 + .3 * (a.L - 1)) * lvlMods(a.L - this.plvl(tgt)).itHits, `A level ${a.L} ${d.n.toLowerCase()} got you.`); this.flush(tgt); } }
       } else {
-        a.tw -= dt; if (a.tw <= 0) { a.tw = 2 + Math.random() * 5; if (Math.random() < 0.5) a.spd = 0; else { a.spd = d.walk; a.ang = Math.random() * 6.28; } }
+        a.tw -= dt; if (a.tw <= 0) { a.tw = 2 + Math.random() * 5; if (Math.random() < 0.5) a.spd = 0; else { a.spd = d.walk; a.ang = home > 18 ? Math.atan2(a.hx - a.x, a.hz - a.z) + (Math.random() - .5) : Math.random() * 6.28; } }      // wanders, drifting back toward home
       }
       if (a.spd > 0) {
         const nx = a.x + Math.sin(a.ang) * a.spd * dt, nz = a.z + Math.cos(a.ang) * a.spd * dt;

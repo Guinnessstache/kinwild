@@ -60,6 +60,12 @@ Each player picks a name and a PIN. Same name + PIN brings the character back on
 
 The "Next step" box walks new players through 19 steps from punching a tree to forging iron.
 
+## Build 14 changes
+
+- **Monsters stay near home.** A monster only chases you about 32 m from where it lives. Past that it gives up, runs home (it can't be hurt on the way) and heals to full when it gets there. Wandering monsters drift back toward home too.
+- **Old gear gets random stats.** Armor and weapons made before random stats existed (they showed the plain base numbers) get rolled stats the next time you log in, or when the server starts for gear in chests.
+- Crafting recipes for gear now show the possible stat range, e.g. Armor 6–15% · Health 9–23.
+
 ## Build 13 changes
 
 - The tutorial box under the minimap disappears once every step is done.

@@ -1,7 +1,7 @@
 // Everything visual: low-poly models built from code (no art files), terrain, sky, water, lighting.
 import * as THREE from 'three';
 import { heightAt, moistAt, genNodes, zones2, THEMES, N, SIZE, HALF, rnd } from '/shared/terrain.js';
-import { CROPS, STRUCTS } from '/shared/data.js';
+import { CROPS, STRUCTS, ITEMS } from '/shared/data.js';
 
 export const MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .9, flatShading: true });
 const GLOW = new THREE.MeshBasicMaterial({ color: '#ffb347' });
@@ -55,18 +55,92 @@ function nodeGeo(t) {
 export const NODE_H = { oak: 3, pine: 3, birch: 3, rock: 1.2, iron: 1.2, coal: 1.2 };
 
 // ---- characters ----
-export function makeCharacter(look, armor) {
-  const g = new THREE.Group(), { shirt, hair, skin } = look, pants = '#3b4a6b';
-  const torsoC = { plate: '#aeb6bf', leather: '#8a5a33', cloth: '#b7a3dc' }[armor] || shirt;       // armor = material of the chest piece
+// Gear shows on the body: each material has its own pieces (tier 2 is richer), rarity adds trim (Fine), glowing
+// accents (Superior) and a stronger glow (Epic), and Superior/Epic gear gives off particles picked by its strongest
+// bonus stat. A full three-piece set adds a glowing ring at the feet.
+const GEARC = {
+  cloth: [{ base: '#b7a3dc', dark: '#7e6aa8', trim: '#e8dcc0' }, { base: '#3f5fbf', dark: '#283d80', trim: '#e6c34a' }],
+  leather: [{ base: '#8a5a33', dark: '#5e3d22', trim: '#c9a26b' }, { base: '#4a3326', dark: '#2c1f17', trim: '#b0b4b8' }],
+  plate: [{ base: '#aeb6bf', dark: '#6f7780', trim: '#5e6670' }, { base: '#dfe6ee', dark: '#8a96a8', trim: '#e6c34a' }],
+};
+export const QCOL = ['#d9d2c2', '#6fd36f', '#5aa9ff', '#c77dff'];
+const FXC = { pow: '#ff8a2a', mend: '#6dff8a', mreg: '#5ab8ff', ereg: '#ffe14a', hp: '#ff4d5e', arm: '#e8eef5' };
+const GLOWV = new THREE.MeshBasicMaterial({ vertexColors: true });
+const MG = parts => { const m = new THREE.Mesh(merge(parts), GLOWV); return m; };       // unlit = looks like it glows
+const parseKey = k => { if (!k) return null; const [id, q, st] = String(k).split(':'); const d = ITEMS[id]; return d ? { id, d, q: +q || 0, st: st || '' } : null; };
+let _dot = null;
+function dotTex() {       // soft round glow for particles
+  if (_dot) return _dot; const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d'), gr = x.createRadialGradient(16, 16, 0, 16, 16, 16);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(.35, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = gr; x.fillRect(0, 0, 32, 32);
+  return (_dot = new THREE.CanvasTexture(c));
+}
+function addFx(u, anchor, type, q, o = {}) {        // a little cloud of particles that move by themselves (see animateCharacter)
+  const n = Math.max(3, Math.round((q >= 3 ? 16 : 7) * (o.mul || 1))), pos = new Float32Array(n * 3), geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.PointsMaterial({ color: FXC[type] || '#ffffff', map: dotTex(), size: q >= 3 ? .22 : .16, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending });
+  const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; anchor.add(pts);
+  u.fx.push({ pts, pos, n, type, seed: Array.from({ length: n }, () => Math.random()), cy: o.cy ?? 0, r: o.r ?? .45, h: o.h ?? 1 });
+}
+export function makeCharacter(look, armor, eq = []) {
+  const g = new THREE.Group(), { shirt, hair, skin } = look;
+  const [hd, ch, lg] = [0, 1, 2].map(i => parseKey(eq[i])), C = x => x && GEARC[x.d.mat]?.[(x.d.tr || 1) - 1];
+  const cc = C(ch), lc = C(lg), hc = C(hd);
+  const torsoC = cc?.base || { plate: '#aeb6bf', leather: '#8a5a33', cloth: '#b7a3dc' }[armor] || shirt, pants = lc?.base || '#3b4a6b', boots = lc ? lc.dark : '#3a2a1e';
   const body = new THREE.Group(); g.add(body);
-  body.add(M([P(box(.62, .72, .36), torsoC, 0, 1.16, 0), P(box(.64, .12, .38), '#4a3221', 0, .82, 0)]));
+  body.add(M([P(box(.62, .72, .36), torsoC, 0, 1.16, 0), P(box(.64, .12, .38), cc ? cc.dark : '#4a3221', 0, .82, 0)]));
   const head = M([P(box(.46, .46, .46), skin, 0, 0, 0), P(box(.5, .2, .5), hair, 0, .2, -.02), P(box(.5, .34, .14), hair, 0, 0, -.2), P(box(.07, .09, .03), '#22252b', .11, .02, .235), P(box(.07, .09, .03), '#22252b', -.11, .02, .235), P(box(.14, .03, .03), '#a8443a', 0, -.12, .235)]);
-  head.position.y = 1.78; body.add(head);
+  const headG = new THREE.Group(); headG.position.y = 1.78; headG.add(head); body.add(headG);
   const limb = (x, y, w, h, c1, c2) => { const p = new THREE.Group(); p.position.set(x, y, 0); p.add(M([P(box(w, h * .72, w + .02), c1, 0, -h * .36, 0), P(box(w, h * .28, w + .02), c2, 0, -h * .86, 0)])); body.add(p); return p; };
-  const armL = limb(.42, 1.5, .2, .72, torsoC, skin), armR = limb(-.42, 1.5, .2, .72, torsoC, skin);
-  const legL = limb(.17, .8, .25, .8, pants, '#3a2a1e'), legR = limb(-.17, .8, .25, .8, pants, '#3a2a1e');
+  const armL = limb(.42, 1.5, .2, .72, torsoC, ch?.d.mat === 'plate' ? cc.dark : skin), armR = limb(-.42, 1.5, .2, .72, torsoC, skin);
+  const legL = limb(.17, .8, .25, .8, pants, boots), legR = limb(-.17, .8, .25, .8, pants, boots);
   const hand = new THREE.Group(); hand.position.set(0, -.68, .12); armR.add(hand);
-  g.userData = { body, head, armL, armR, legL, legR, hand, phase: Math.random() * 6, swing: 0, held: null };
+  const u = g.userData = { body, head: headG, armL, armR, legL, legR, hand, phase: Math.random() * 6, swing: 0, held: null, fx: [], t: Math.random() * 10 };
+  const qc = x => QCOL[x.q];
+  // ---- head ----
+  if (hd && hc) {
+    const m = hd.d.mat, t2 = hd.d.tr === 2, p = [], gl = [];
+    if (m === 'cloth') {
+      if (t2) p.push(P(cyl(.4, .4, .05, 10), hc.base, 0, .22, 0), P(cone(.27, .55, 8), hc.base, 0, .5, -.04, -.15), P(cyl(.28, .28, .07, 10), hc.trim, 0, .27, 0));      // wizard hat
+      else p.push(P(box(.54, .3, .54), hc.base, 0, .14, -.02), P(box(.54, .44, .14), hc.base, 0, -.04, -.22), P(box(.56, .05, .06), hc.dark, 0, .02, .25));      // hood
+    } else if (m === 'leather') {
+      p.push(P(box(.52, .18, .52), hc.base, 0, .2, 0), P(box(.55, .06, .55), hc.dark, 0, .12, 0));
+      if (t2) p.push(P(box(.5, .14, .06), hc.dark, 0, -.1, .24), P(box(.06, .12, .5), hc.trim, 0, .32, 0));        // face mask and a studded ridge
+    } else {
+      p.push(P(box(.54, .52, .54), hc.base, 0, .03, 0), P(box(.42, .05, .03), '#1b1d22', 0, .03, .275), P(box(.06, .2, .03), hc.dark, 0, -.06, .278));
+      if (t2) p.push(P(box(.06, .22, .46), '#c0392b', 0, .38, -.02), P(box(.56, .05, .56), hc.trim, 0, -.21, 0));          // plume and gold rim
+    }
+    if (hd.q >= 1) p.push(P(box(.56, .04, .56), qc(hd), 0, m === 'cloth' && t2 ? .3 : .11, 0));
+    if (hd.q >= 2) gl.push(P(ico(.055), qc(hd), 0, .16, .29));
+    if (hd.q >= 3) gl.push(P(box(.58, .025, .025), qc(hd), 0, .26, .27));
+    headG.add(M(p)); if (gl.length) headG.add(MG(gl));
+  }
+  // ---- chest ----
+  if (ch && cc) {
+    const m = ch.d.mat, t2 = ch.d.tr === 2, p = [P(box(.66, .7, .4), cc.base, 0, 1.18, 0), P(box(.68, .1, .42), cc.dark, 0, .84, 0)], gl = [];
+    if (m === 'cloth') { p.push(P(box(.62, .42, .39), cc.base, 0, .62, 0), P(box(.08, .78, .02), cc.trim, .12, 1.0, .21, 0, 0, .35)); if (t2) p.push(P(box(.7, .08, .42), cc.trim, 0, 1.5, 0)); }
+    else if (m === 'leather') { p.push(...[-1, 1].map(sx => P(box(.26, .12, .3), cc.dark, sx * .42, 1.53, 0)), P(box(.06, .72, .02), cc.dark, -.1, 1.18, .21, 0, 0, -.5)); if (t2) p.push(...[-.15, 0, .15].map(y => P(box(.05, .05, .02), cc.trim, .12, 1.18 + y, .215))); }
+    else { p.push(...[-1, 1].map(sx => P(box(.34, .2, .42), cc.base, sx * .44, 1.55, 0)), P(box(.3, .52, .04), cc.dark, 0, 1.2, .21)); if (t2) p.push(...[-1, 1].map(sx => P(box(.36, .04, .44), cc.trim, sx * .44, 1.46, 0)), P(box(.12, .12, .03), cc.trim, 0, 1.3, .235)); }
+    if (ch.q >= 1) p.push(P(box(.69, .04, .43), qc(ch), 0, 1.0, 0));
+    if (ch.q >= 2) gl.push(P(ico(.07), qc(ch), 0, 1.3, .25));
+    if (ch.q >= 3) gl.push(...[-1, 1].map(sx => P(box(.36, .03, .03), qc(ch), sx * .44, 1.66, .21)));
+    body.add(M(p)); if (gl.length) body.add(MG(gl));
+  }
+  // ---- legs ----
+  if (lg && lc) for (const L of [legL, legR]) {
+    const m = lg.d.mat, t2 = lg.d.tr === 2, p = [], gl = [];
+    if (m === 'leather') p.push(P(box(.27, .14, .08), lc.dark, 0, -.4, .13));
+    if (m === 'plate') p.push(P(box(.29, .16, .1), lc.dark, 0, -.4, .13), P(box(.29, .2, .29), lc.dark, 0, -.7, 0));
+    if (m === 'cloth' && t2) p.push(P(box(.27, .05, .27), lc.trim, 0, -.56, 0));
+    if (t2 && m !== 'cloth') p.push(P(box(.1, .06, .03), lc.trim, 0, -.4, .185));
+    if (lg.q >= 1) p.push(P(box(.27, .04, .27), qc(lg), 0, -.18, 0));
+    if (lg.q >= 2) gl.push(P(ico(.04), qc(lg), 0, -.4, .19));
+    if (p.length) L.add(M(p)); if (gl.length) L.add(MG(gl));
+  }
+  // ---- particles from Superior / Epic armor, and a ring for a full set ----
+  for (const [x, anchor, o] of [[hd, headG, { cy: .1, r: .35, h: .5, mul: .6 }], [ch, body, { cy: 1.1, r: .5, h: 1 }], [lg, body, { cy: .45, r: .35, h: .5, mul: .6 }]]) if (x && x.q >= 2) addFx(u, anchor, x.st, x.q, o);
+  if (hd && ch && lg && hd.d.mat === ch.d.mat && ch.d.mat === lg.d.mat) {
+    const best = Math.max(hd.q, ch.q, lg.q), ring = new THREE.Mesh(new THREE.RingGeometry(.55, .68, 24), new THREE.MeshBasicMaterial({ color: best ? QCOL[best] : GEARC[ch.d.mat][0].trim, transparent: true, opacity: .8, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = .05; g.add(ring); u.ring = ring;
+  }
   return g;
 }
 const HELD = {
@@ -74,24 +148,54 @@ const HELD = {
   pickaxe: c => [P(cyl(.03, .03, .8, 5), '#7a5536', 0, .25, 0), P(box(.07, .09, .7), c, 0, .62, 0)],
   hammer: () => [P(cyl(.03, .03, .6, 5), '#7a5536', 0, .2, 0), P(box(.16, .16, .32), '#8e9499', 0, .5, 0)],
   hoe: () => [P(cyl(.03, .03, 1, 5), '#7a5536', 0, .3, 0), P(box(.2, .05, .22), '#8e9499', 0, .8, .1)],
-  spear: () => [P(cyl(.025, .025, 1.7, 5), '#7a5536', 0, .5, 0), P(cone(.07, .3, 4), '#c9ced3', 0, 1.5, 0)],
-  sword: () => [P(box(.05, .2, .05), '#5a3d28', 0, 0, 0), P(box(.26, .05, .07), '#c9a23a', 0, .12, 0), P(box(.08, .85, .03), '#d7dde2', 0, .57, 0)],
+  spear: c => [P(cyl(.025, .025, 1.7, 5), '#7a5536', 0, .5, 0), P(cone(.07, .3, 4), c, 0, 1.5, 0)],
+  sword: c => [P(box(.05, .2, .05), '#5a3d28', 0, 0, 0), P(box(.26, .05, .07), '#c9a23a', 0, .12, 0), P(box(.08, .85, .03), c, 0, .57, 0)],
   bow: () => [P(new THREE.TorusGeometry(.5, .025, 4, 10, Math.PI), '#7a5536', 0, .15, 0, 0, Math.PI / 2, -Math.PI / 2), P(box(.012, 1, .012), '#e8e4d8', 0, .15, 0)],
   staff: c => [P(cyl(.03, .035, 1.7, 5), '#7a5536', 0, .45, 0), P(ico(.11), c === '#d7dde2' ? '#7fd4ff' : '#9be37a', 0, 1.38, 0), P(cone(.07, .14, 4), '#7a5536', 0, 1.24, 0)],
   rod: () => [P(cyl(.015, .03, 1.9, 5), '#9a7a4a', 0, .7, .3, .45, 0, 0), P(box(.01, .9, .01), '#e8e4d8', 0, 1.1, 1.05)],
   torch: () => [P(cyl(.03, .04, .6, 5), '#7a5536', 0, .2, 0)],
   water: () => [P(ico(.14), '#8a5a33', 0, 0, .05, 0, 0, 0, 1, 1.3, .7)],
 };
-export function setHeld(char, itemId, def) {
-  const u = char.userData; if (u.held === itemId) return; u.held = itemId;
-  u.hand.clear(); u.light = null; if (!itemId || !def) return;
-  const f = HELD[def.tool];
-  if (f) { u.hand.add(M(f(def.tier === 'iron' ? '#d7dde2' : '#8e9499'), false)); u.hand.rotation.x = Math.PI / 2 - .3; }
+// the glowing part of a Superior / Epic weapon: its blade, head or string
+const HELD_GLOW = {
+  sword: (c, q) => [P(box(q >= 3 ? .1 : .03, .8, q >= 3 ? .04 : .035), c, 0, .58, q >= 3 ? 0 : .02)],
+  spear: c => [P(cone(.075, .32, 4), c, 0, 1.5, 0)],
+  bow: c => [P(box(.02, 1, .02), c, 0, .15, 0)],
+  staff: c => [P(ico(.15), c, 0, 1.38, 0)],
+};
+const FX_AT = { sword: { cy: .55, r: .12, h: .8 }, spear: { cy: 1.3, r: .15, h: .5 }, bow: { cy: .15, r: .2, h: .9 }, staff: { cy: 1.35, r: .22, h: .4 } };
+export function setHeld(char, key) {
+  const u = char.userData; if (u.held === key) return; u.held = key;
+  u.hand.clear(); u.light = null; u.fx = u.fx.filter(f => f.pts.parent !== u.hand); if (!key) return;
+  const x = parseKey(key), def = x?.d; if (!def) return;
+  const f = HELD[def.tool], tier = def.tier === 'iron' || def.tr === 2 || String(x.id).startsWith('iron') ? '#d7dde2' : '#8e9499';
+  if (f) { u.hand.add(M(f(def.tr === 2 ? '#e8eef5' : tier), false)); u.hand.rotation.x = Math.PI / 2 - .3; }
   else { u.hand.add(M([P(box(.16, .16, .16), def.food ? '#d9534f' : '#c49a6c', 0, 0, .05)], false)); u.hand.rotation.x = 0; }
+  if (def.gear && x.q >= 2 && HELD_GLOW[def.tool]) { u.hand.add(MG(HELD_GLOW[def.tool](QCOL[x.q], x.q))); addFx(u, u.hand, x.st, x.q, FX_AT[def.tool]); }
+  else if (def.gear && x.q === 1 && HELD_GLOW[def.tool]) u.hand.add(M(HELD_GLOW[def.tool](QCOL[1], 1).map(g => g.scale(1.02, 1.02, 1.02)), false));
   if (def.tool === 'torch') { const fl = new THREE.Mesh(cone(.09, .25, 5), GLOW); fl.position.y = .6; u.hand.add(fl); const l = new THREE.PointLight('#ffb060', 14, 16, 1.6); l.position.y = .7; u.hand.add(l); }
 }
+// particle motion for each effect type (all positions are local to the anchor, so they follow the body or the weapon)
+function stepFx(f, t) {
+  const { pos, n, seed, cy, r, h } = f;
+  for (let i = 0; i < n; i++) {
+    const s = seed[i], k = i * 3; let x, y, z;
+    switch (f.type) {
+      case 'pow': case 'hp': { const a = (t * (f.type === 'pow' ? .9 : .45) + s) % 1, ang = s * 40; x = Math.cos(ang) * r * (1 - a * .5); z = Math.sin(ang) * r * (1 - a * .5); y = cy - h * .5 + a * h * 1.4; break; }        // embers / life motes rise
+      case 'mend': { const a = (t * .35 + s) % 1, ang = s * 30 + t * 1.5; x = Math.cos(ang) * r * .9; z = Math.sin(ang) * r * .9; y = cy - h * .5 + a * h * 1.2; break; }         // healing motes spiral up
+      case 'mreg': { const ang = s * 6.283 + t * (1.2 + s); x = Math.cos(ang) * r * 1.1; z = Math.sin(ang) * r * 1.1; y = cy + Math.sin(t * 2 + s * 9) * h * .45; break; }          // arcane orbs circle
+      case 'ereg': { const j = Math.floor(t * 14 + s * 7); x = (rnd(i, j, 1) - .5) * r * 2; z = (rnd(i, j, 2) - .5) * r * 2; y = cy + (rnd(i, j, 3) - .5) * h; break; }                  // electric crackle jumps around
+      default: { const j = Math.floor(t * 3 + s * 5); x = (rnd(i, j, 4) - .5) * r * 1.8; z = (rnd(i, j, 5) - .5) * r * 1.8; y = cy + (rnd(i, j, 6) - .5) * h; }                      // armor glints
+    }
+    pos[k] = x; pos[k + 1] = y; pos[k + 2] = z;
+  }
+  f.pts.geometry.attributes.position.needsUpdate = true;
+  if (f.type === 'ereg' || f.type === 'arm') f.pts.material.opacity = .55 + .45 * Math.abs(Math.sin(t * 9 + seed[0] * 5));
+}
 export function animateCharacter(g, dt, speed, mode) {    // mode 0 idle 1 walk 2 run 3 sneak 4 swim
-  const u = g.userData; u.phase += dt * (2 + speed * 1.7);
+  const u = g.userData; u.phase += dt * (2 + speed * 1.7); u.t += dt;
+  if (g.visible) for (const f of u.fx) stepFx(f, u.t);
+  if (u.ring) { u.ring.rotation.z += dt * .6; u.ring.material.opacity = .6 + .3 * Math.sin(u.t * 2.5); }
   const amp = Math.min(1, speed / 5) * (mode === 4 ? .5 : .9), s = Math.sin(u.phase);
   u.legL.rotation.x = s * amp; u.legR.rotation.x = -s * amp; u.armL.rotation.x = -s * amp * .8;
   u.swing = Math.max(0, u.swing - dt * 3.2);

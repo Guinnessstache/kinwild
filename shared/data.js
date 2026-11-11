@@ -108,6 +108,14 @@ export const ABIL_COST = { bow: ['mp', 15], staff: ['mp', 30], sword: ['en', 20]
 export const CLASSES = { sword: ['Guardian', 'Tank', '🛡️', 'Taunt'], spear: ['Striker', 'Melee DPS', '⚔️', 'Power Strike'], bow: ['Ranger', 'Ranged DPS', '🏹', 'Aimed Shot'], staff: ['Mender', 'Healer', '✨', 'Group Heal'] };
 export const ABIL_CD = { sword: 12, spear: 8, bow: 8, staff: 20 };
 export const WSKILL = { sword: 'melee', spear: 'melee', bow: 'archery', staff: 'healing' };
+// How gear looks on a character: id, quality, and its strongest bonus stat (which picks the glow / particle effect).
+const STAT_STEP = { hp: 6, pow: 3, mend: 3, arm: 2, mreg: 10, ereg: 10 };
+export function domStat(it) {
+  const d = ITEMS[it?.id]; if (!d?.gear) return ''; let best = '', bv = 0;
+  for (const k in it.st || {}) { if (k === 'dmg' || (d.base && k in d.base)) continue; const v = it.st[k] / (STAT_STEP[k] || 1); if (v > bv) { bv = v; best = k; } }
+  return best || (d.mat ? { cloth: 'mend', leather: 'pow', plate: 'hp' }[d.mat] : d.tool === 'staff' ? 'mend' : 'pow');
+}
+export const gearKey = it => !it ? 0 : ITEMS[it.id]?.gear ? `${it.id}:${it.q || 0}:${domStat(it)}` : it.id;
 export const SET_BONUS = { plate: ['hp', 30, 'Plate set: +30 Health'], leather: ['pow', 10, 'Leather set: +10% Power'], cloth: ['mend', 15, 'Cloth set: +15% Healing'] };
 export const combatLevel = sk => Math.max(sk.melee?.l || 1, sk.archery?.l || 1, sk.defense?.l || 1, sk.healing?.l || 1);
 // Fights against higher-level monsters are hard on purpose: a red (2+ above you) can kill a lone player.

@@ -1,6 +1,6 @@
 // Client: input, third-person controller, networking, and glue between the 3D world and the UI.
 import * as THREE from 'three';
-import { ITEMS, NODES, STRUCTS, ANIMALS, SKILLS, CLASSES, ABIL_CD, QUAL, conColor, combatLevel, calcStats, mobName, atkSpd, COST, ABIL_COST } from '/shared/data.js';
+import { ITEMS, NODES, STRUCTS, ANIMALS, SKILLS, CLASSES, ABIL_CD, QUAL, conColor, combatLevel, calcStats, mobName, atkSpd, COST, ABIL_COST, gearKey } from '/shared/data.js';
 import { heightAt, zoneAt, ZONES, SPAWN, HALF, SIZE } from '/shared/terrain.js';
 import * as G from './gfx.js';
 import { createUI } from './ui.js';
@@ -140,11 +140,11 @@ sock.on('disconnect', () => { if (S.me) { ui.toast('Connection lost — reconnec
 const me = { x: 0, y: 0, z: 0, vx: 0, vz: 0, vy: 0, yaw: 0, grounded: true, char: null, mode: 0, speed: 0, lastSwing: 0 };
 function addPlayer(p) {
   const old = S.players.get(p.id); if (old) scene.remove(old.char);
-  const char = G.makeCharacter(p.look, p.armor); char.add(G.makeLabel((p.tag ? `[${p.tag}] ` : '') + p.name, p.col || '#ffffff'));
+  const char = G.makeCharacter(p.look, p.armor, p.eq); char.add(G.makeLabel((p.tag ? `[${p.tag}] ` : '') + p.name, p.col || '#ffffff'));
   char.position.set(p.x, p.y, p.z); scene.add(char);
   S.players.set(p.id, { ...p, char, tx: p.x, ty: p.y, tz: p.z, tr: p.r || 0, a: 0, held: 0 });
 }
-function refreshMe(p) { const pos = me.char?.position.clone(); if (me.char) scene.remove(me.char); me.char = G.makeCharacter(p.look, p.armor); me.char.add(G.makeLabel((p.tag ? `[${p.tag}] ` : '') + p.name, p.col || '#fff3c4')); if (pos) me.char.position.copy(pos); scene.add(me.char); S.pub = p; }
+function refreshMe(p) { const pos = me.char?.position.clone(); if (me.char) scene.remove(me.char); me.char = G.makeCharacter(p.look, p.armor, p.eq); me.char.add(G.makeLabel((p.tag ? `[${p.tag}] ` : '') + p.name, p.col || '#fff3c4')); if (pos) me.char.position.copy(pos); scene.add(me.char); S.pub = p; }
 const ringGeo = new THREE.RingGeometry(.82, 1, 24); ringGeo.rotateX(-Math.PI / 2);
 const myLevel = () => combatLevel(S.me.skills);
 function addAnimal(a) {       // every monster stands on a ring coloured by its level next to yours
@@ -186,7 +186,7 @@ function groundAt(x, z, py) {
 function start(init) {
   S.id = init.id; S.me = init.me; S.time = init.time; S.off = init.now - Date.now(); S.clan = init.clan.clan; S.invites = init.clan.invites;
   me.x = init.me.x; me.z = init.me.z; me.y = heightAt(me.x, me.z);
-  refreshMe({ name: init.me.name, look: init.me.look, armor: ITEMS[init.me.equip.chest?.id]?.mat, tag: S.clan?.tag, col: S.clan?.color });
+  refreshMe({ name: init.me.name, look: init.me.look, armor: ITEMS[init.me.equip.chest?.id]?.mat, eq: ['head', 'chest', 'legs'].map(k => gearKey(init.me.equip[k])), tag: S.clan?.tag, col: S.clan?.color });
   S.party = init.party.party; S.pinv = init.party.inv; S.voice = new Set(init.voice); partyHud();
   for (const id of init.dead) { S.dead.add(id); world.setNode(id, false); }
   init.players.forEach(addPlayer); init.animals.forEach(addAnimal); S.bulk = true; init.structs.forEach(addStruct); S.bulk = false; rebuildCol(); refreshCaps();
@@ -202,7 +202,7 @@ sock.on('pu', p => { if (p.id === S.id) refreshMe(p); else if (S.me) addPlayer(p
 sock.on('a+', a => S.me && addAnimal(a)); sock.on('a-', id => { if (id === S.lock) S.lock = null; const a = S.animals.get(id); if (a) { puff(a.g.position.x, a.g.position.y + .5, a.g.position.z, '#ffffff', 10); scene.remove(a.g); S.animals.delete(id); } });
 sock.on('s', sn => {
   if (!S.me) return; S.time = sn.t;
-  for (const [id, x, y, z, r, a, held] of sn.p) { const p = S.players.get(id); if (p) { p.tx = x; p.ty = y; p.tz = z; p.tr = r; p.a = a; G.setHeld(p.char, held || null, ITEMS[held]); } }
+  for (const [id, x, y, z, r, a, held] of sn.p) { const p = S.players.get(id); if (p) { p.tx = x; p.ty = y; p.tz = z; p.tr = r; p.a = a; G.setHeld(p.char, held || null); } }
   for (const [id, x, y, z, r, mv] of sn.a) { const a = S.animals.get(id); if (a) { a.tx = x; a.ty = y; a.tz = z; a.tr = r; a.mv = mv; } }
 });
 sock.on('me', u => { Object.assign(S.me, u); if (u.hp != null || u.max) ui.vitals(); if (u.skills) recolor(); if (u.inv || u.skills || u.quest != null || u.known || u.perm) { ui.refresh(); buildBar(); } });
@@ -792,7 +792,7 @@ function updateMe(dt) {
   else if (performance.now() - me.lastSwing < 500 || (heldDef()?.tool === 'bow' && ml === 0)) me.yaw = lerpAng(me.yaw, Math.atan2(fx, fz), Math.min(1, dt * 14));
   else if (ml > .05) me.yaw = lerpAng(me.yaw, Math.atan2(mx, mz), Math.min(1, dt * 10));
   me.char.position.set(me.x, me.y, me.z); me.char.rotation.y = me.yaw;
-  G.setHeld(me.char, held()?.id || null, heldDef()); G.animateCharacter(me.char, dt, me.speed, me.mode);
+  G.setHeld(me.char, gearKey(held()) || null); G.animateCharacter(me.char, dt, me.speed, me.mode);
   if (S.fishing && me.speed > 1) S.fishing = false;
 }
 // free build camera: fly anywhere within 40 m of the character and up to 35 m above, to look over a whole house

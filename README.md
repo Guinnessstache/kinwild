@@ -60,6 +60,14 @@ Each player picks a name and a PIN. Same name + PIN brings the character back on
 
 The "Next step" box walks new players through 19 steps from punching a tree to forging iron.
 
+## Build 16 changes
+
+- **Gear shows on your character.** Every armor piece has its own look by material: cloth hood/robe/leggings (silk: wizard hat, gold trim), leather cap/tunic with shoulder pads and knee pads (hardened: face mask, studs), plate helm with visor, pauldrons and greaves (steel: red plume, gold trim).
+- **Rarity shows too:** Fine gear gets green trim, Superior gets glowing blue accents, Epic glows purple. Superior and Epic weapons get a glowing blade, spearhead, bowstring or staff orb.
+- **Stat effects:** Superior and Epic gear gives off particles picked by its strongest bonus stat — embers (Power), green motes (Healing), orbiting blue orbs (Mana Regen), crackling sparks (Energy Regen), red motes (Health), silver glints (Armor). Epic makes more and bigger particles.
+- **Full sets** (three pieces of one material) put a glowing ring at your feet, colored by the set's best rarity.
+- Everyone sees each other's gear.
+
 ## Build 15 changes
 
 - **Mana 🔮 and energy ⚡.** Two new bars under health. Bows and staffs use mana (arrow 5, staff zap 8, heal 10); swords and spears use energy (7–8 per hit on a monster). Axes, pickaxes and fists are free. Class abilities cost more (Aimed Shot 15 mana, Group Heal 30 mana, Taunt 20 energy, Power Strike 25 energy). Mana refills 3/s and energy 6/s on their own.

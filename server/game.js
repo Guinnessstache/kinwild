@@ -1,6 +1,6 @@
 // Authoritative game simulation: everything that matters (items, skills, world state) is decided here.
 import crypto from 'crypto';
-import { ITEMS, RECIPES, STRUCTS, NODES, ANIMALS, CROPS, SKILLS, QUESTS, STATION_NAMES, xpNeed, DAY_LEN, MAX_LVL, lvlMods, atkSpd, COST, MANA_REGEN, ENERGY_REGEN } from '../shared/data.js';
+import { ITEMS, RECIPES, STRUCTS, NODES, ANIMALS, CROPS, SKILLS, QUESTS, STATION_NAMES, xpNeed, DAY_LEN, MAX_LVL, lvlMods, atkSpd, gearKey, COST, MANA_REGEN, ENERGY_REGEN } from '../shared/data.js';
 import { install, stk, distSpawn } from './rpg.js';
 import { heightAt, biomeAt, genNodes, zoneAt, SPAWN, HALF } from '../shared/terrain.js';
 const EDGE = HALF - 40;      // how far out anything may go
@@ -110,7 +110,7 @@ export class Game {
     } };
   }
   held(p) { return p.inv[p.sel]; }
-  pub(p) { const c = this.clans[p.clan]; return { id: p.id, name: p.name, x: r2(p.x), y: r2(p.y), z: r2(p.z), r: p.r, look: p.look, tag: c?.tag || '', col: c?.color || '', armor: ITEMS[p.equip.chest?.id]?.mat || '', lv: this.plvl(p) }; }
+  pub(p) { const c = this.clans[p.clan]; return { id: p.id, name: p.name, x: r2(p.x), y: r2(p.y), z: r2(p.z), r: p.r, look: p.look, tag: c?.tag || '', col: c?.color || '', armor: ITEMS[p.equip.chest?.id]?.mat || '', eq: ['head', 'chest', 'legs'].map(k => gearKey(p.equip[k])), lv: this.plvl(p) }; }
   apub(a) { return { id: a.id, t: a.t, x: r2(a.x), y: r2(a.y), z: r2(a.z), r: a.ang, L: a.L, hp: Math.round(100 * a.hp / a.max) }; }
   priv(p) { return { name: p.name, x: p.x, y: p.y, z: p.z, inv: p.inv, equip: p.equip, skills: p.skills, hp: p.hp, mp: p.mp ?? 100, en: p.en ?? 100, max: this.maxHp(p), hunger: p.hunger, thirst: p.thirst, quest: p.quest, look: p.look, known: p.known, buff: p.buff || null, recallAt: p.recallAt || 0, perm: p.perm }; }
   spub(s) { return { ...s, d: this.pd(s), on: this.players.get(s.o)?.name || s.on, c: this.clanOf(s.o), cc: this.clans[this.clanOf(s.o)]?.color || '' }; }
@@ -371,7 +371,7 @@ export class Game {
     }
     if (!this.players.size) return;
     // each player only hears about animals within 220 m: the land is big and far ones are hidden in the fog anyway
-    const P = [...this.players.values()].map(p => [p.id, r2(p.x), r2(p.y), r2(p.z), p.r, p.a, this.held(p)?.id || 0]);
+    const P = [...this.players.values()].map(p => [p.id, r2(p.x), r2(p.y), r2(p.z), p.r, p.a, gearKey(this.held(p))]);
     const A = [...this.animals.values()].map(a => [a.id, r2(a.x), r2(a.y), r2(a.z), r2(a.ang), a.spd > 3 ? 2 : a.spd > 0 ? 1 : 0]);
     for (const p of this.players.values()) p.socket.volatile.emit('s', { t: this.time, p: P, a: A.filter(a => Math.abs(a[1] - p.x) < 220 && Math.abs(a[3] - p.z) < 220) });
   }

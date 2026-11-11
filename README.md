@@ -60,6 +60,12 @@ Each player picks a name and a PIN. Same name + PIN brings the character back on
 
 The "Next step" box walks new players through 19 steps from punching a tree to forging iron.
 
+## Build 19 changes
+
+- **About three times as many creatures:** roughly 990 across the map instead of 315 (rabbits 160, hens 120, deer 140, boars 110, wolves 180, spiders 150, bears 130).
+- **Faster refill:** the more of a kind are missing, the quicker they come back, and about half of the new ones turn up 60–160 m from a player.
+- **Never empty around you:** if fewer than 10 creatures are within 120 m of a player, new ones wander in from just out of sight.
+
 ## Build 18 changes
 
 - **Off-hand torch.** A new Off-hand slot under Wearing. Right-click a torch (or click with it on the action bar) to hold it in your left hand: it stays lit while your weapon or tools are out, and other players see it. Right-click it in the Wearing panel to put it away.

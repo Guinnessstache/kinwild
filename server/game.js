@@ -4,6 +4,7 @@ import { ITEMS, RECIPES, STRUCTS, NODES, ANIMALS, CROPS, SKILLS, QUESTS, STATION
 import { install, stk, distSpawn } from './rpg.js';
 import { heightAt, biomeAt, genNodes, zoneAt, SPAWN, HALF } from '../shared/terrain.js';
 const EDGE = HALF - 40;      // how far out anything may go
+const CAP = Math.round(Object.values(ANIMALS).reduce((s, d) => s + d.count, 0) * 1.35);     // top-ups around players stop here
 const LEASH = 32;            // a monster gives up the chase this far from where it lives
 
 const INV = 32, STACK = 99;
@@ -207,7 +208,12 @@ export class Game {
     }
     for (const pt of this.parties.values()) this.sendParty(pt.m);
     const cnt = {}; for (const a of this.animals.values()) cnt[a.t] = (cnt[a.t] || 0) + 1;
-    for (const t in ANIMALS) if ((cnt[t] || 0) < ANIMALS[t].count && Math.random() < 0.15) this.spawnAnimal(t, false);
+    // refill: the more of a kind are missing, the faster they come back, and about half turn up around the players
+    const ps = [...this.players.values()];
+    // never let a player's surroundings run dry: if fewer than 10 creatures are within 120 m, one wanders in from out of sight
+    for (const p of ps) { let n = 0; for (const a of this.animals.values()) if (Math.abs(a.x - p.x) < 120 && Math.abs(a.z - p.z) < 120 && Math.hypot(a.x - p.x, a.z - p.z) < 120) n++;
+      if (n < 10 && this.animals.size < CAP) { const ts = Object.keys(ANIMALS); this.spawnAnimal(ts[Math.floor(Math.random() * ts.length)], false, p, true); } }
+    for (const t in ANIMALS) { const miss = ANIMALS[t].count - (cnt[t] || 0); for (let k = 0; k < Math.min(3, Math.ceil(miss / 15)); k++) if (Math.random() < .5) this.spawnAnimal(t, false, ps.length && Math.random() < .5 ? ps[Math.floor(Math.random() * ps.length)] : null); }
     this.dirty = this.dirty || this.players.size > 0 && now % 60000 < 1000;   // keep time-of-day roughly saved
   }
 
@@ -264,10 +270,11 @@ export class Game {
   }
 
   // ---------- animals ----------
-  spawnAnimal(t, anywhere) {
+  spawnAnimal(t, anywhere, near, extra) {       // extra: a top-up beyond the normal count       // near: a player to restock the land around (60–160 m away, out of sight)
     const d = ANIMALS[t];
     for (let i = 0; i < 30; i++) {
-      const x = (Math.random() * 2 - 1) * (EDGE - 20), z = (Math.random() * 2 - 1) * (EDGE - 20);
+      let x, z; if (near) { const ang = Math.random() * 6.283, r = extra ? 55 + Math.random() * 60 : 60 + Math.random() * 100; x = near.x + Math.cos(ang) * r; z = near.z + Math.sin(ang) * r; if (Math.abs(x) > EDGE - 20 || Math.abs(z) > EDGE - 20) continue; }
+      else { x = (Math.random() * 2 - 1) * (EDGE - 20); z = (Math.random() * 2 - 1) * (EDGE - 20); }
       const zone = zoneAt(x, z); if (!d.biomes.includes(biomeAt(x, z, zone))) continue;
       const L = zone.lo + Math.floor(Math.random() * (zone.hi - zone.lo + 1)); if (L < (d.minL || 1) || distSpawn(x, z) < 12) continue;      // level comes from the zone it lives in
       if (!anywhere) { let close = false; for (const p of this.players.values()) if (Math.hypot(p.x - x, p.z - z) < 45) close = true; if (close) continue; }

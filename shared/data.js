@@ -162,13 +162,13 @@ export const NODES = {
 // mode: flee = runs away, defend = fights back if hit, hunt = attacks players (unless PEACEFUL). minL = lowest zone level it lives in.
 // Stats are for level 1; health, damage and xp scale up with the zone level where it spawns.
 export const ANIMALS = {
-  rabbit: { n: 'Rabbit', hp: 6, walk: 1.6, run: 6, sense: 7, mode: 'flee', xp: 10, count: 60, biomes: ['meadow'], drops: [['raw_meat', 1, 1, 1], ['hide', 1, 1, .5]] },
-  fowl: { n: 'Wild Hen', hp: 4, walk: 1.2, run: 4.5, sense: 6, mode: 'flee', xp: 8, count: 45, biomes: ['meadow', 'forest'], drops: [['raw_meat', 1, 1, 1], ['feather', 2, 4, 1]] },
-  deer: { n: 'Deer', hp: 18, walk: 1.8, run: 7, sense: 11, mode: 'flee', xp: 22, count: 45, biomes: ['forest', 'meadow'], drops: [['raw_meat', 2, 3, 1], ['hide', 1, 2, 1], ['bone', 1, 2, .6]] },
-  boar: { n: 'Boar', hp: 26, walk: 1.4, run: 5, sense: 0, mode: 'defend', dmg: 6, xp: 28, count: 30, biomes: ['forest'], drops: [['raw_meat', 2, 4, 1], ['hide', 1, 1, 1], ['bone', 1, 2, 1]] },
-  wolf: { n: 'Wolf', hp: 20, walk: 1.8, run: 5.6, sense: 14, mode: 'hunt', dmg: 6, xp: 35, count: 50, minL: 2, biomes: ['forest', 'rock', 'meadow'], drops: [['hide', 1, 2, 1], ['bone', 1, 2, 1], ['fang', 1, 2, .7], ['raw_meat', 1, 1, .5]] },
-  spider: { n: 'Giant Spider', hp: 16, walk: 1.6, run: 5.2, sense: 12, mode: 'hunt', dmg: 5, xp: 32, count: 45, minL: 3, biomes: ['forest'], drops: [['spider_silk', 1, 2, 1], ['fang', 1, 1, .3]] },
-  bear: { n: 'Bear', hp: 40, walk: 1.4, run: 5.4, sense: 11, mode: 'hunt', dmg: 9, xp: 60, count: 40, minL: 5, biomes: ['forest', 'rock'], drops: [['raw_meat', 3, 5, 1], ['thick_hide', 1, 2, 1], ['bone', 2, 3, 1], ['fang', 1, 2, .5]] },
+  rabbit: { n: 'Rabbit', hp: 6, walk: 1.6, run: 6, sense: 7, mode: 'flee', xp: 10, count: 160, biomes: ['meadow'], drops: [['raw_meat', 1, 1, 1], ['hide', 1, 1, .5]] },
+  fowl: { n: 'Wild Hen', hp: 4, walk: 1.2, run: 4.5, sense: 6, mode: 'flee', xp: 8, count: 120, biomes: ['meadow', 'forest'], drops: [['raw_meat', 1, 1, 1], ['feather', 2, 4, 1]] },
+  deer: { n: 'Deer', hp: 18, walk: 1.8, run: 7, sense: 11, mode: 'flee', xp: 22, count: 140, biomes: ['forest', 'meadow'], drops: [['raw_meat', 2, 3, 1], ['hide', 1, 2, 1], ['bone', 1, 2, .6]] },
+  boar: { n: 'Boar', hp: 26, walk: 1.4, run: 5, sense: 0, mode: 'defend', dmg: 6, xp: 28, count: 110, biomes: ['forest'], drops: [['raw_meat', 2, 4, 1], ['hide', 1, 1, 1], ['bone', 1, 2, 1]] },
+  wolf: { n: 'Wolf', hp: 20, walk: 1.8, run: 5.6, sense: 14, mode: 'hunt', dmg: 6, xp: 35, count: 180, minL: 2, biomes: ['forest', 'rock', 'meadow'], drops: [['hide', 1, 2, 1], ['bone', 1, 2, 1], ['fang', 1, 2, .7], ['raw_meat', 1, 1, .5]] },
+  spider: { n: 'Giant Spider', hp: 16, walk: 1.6, run: 5.2, sense: 12, mode: 'hunt', dmg: 5, xp: 32, count: 150, minL: 3, biomes: ['forest'], drops: [['spider_silk', 1, 2, 1], ['fang', 1, 1, .3]] },
+  bear: { n: 'Bear', hp: 40, walk: 1.4, run: 5.4, sense: 11, mode: 'hunt', dmg: 9, xp: 60, count: 130, minL: 5, biomes: ['forest', 'rock'], drops: [['raw_meat', 3, 5, 1], ['thick_hide', 1, 2, 1], ['bone', 2, 3, 1], ['fang', 1, 2, .5]] },
 };
 
 export const CROPS = {

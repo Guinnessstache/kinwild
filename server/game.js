@@ -298,14 +298,19 @@ export class Game {
     const now = Date.now(); if (now - p.lastSwing < atkSpd('bow') * 1000 - 120) return; p.lastSwing = now;
     let mul = 1; if (d.ab && now >= (p.cd.bow || 0)) { mul = 2.5; p.cd.bow = now + 8000; }          // Aimed Shot
     if (this.count(p, 'arrow') < 1) return this.toast(p, 'No arrows! Craft some at a workbench.', 'bad');
-    const len = Math.hypot(d.dx, d.dy, d.dz); if (!(len > 0.5 && len < 1.5)) return;
+    let len = Math.hypot(d.dx, d.dy, d.dz); if (!(len > 0.5 && len < 1.5)) return;
+    const ox = p.x, oy = p.y + 1.4, oz = p.z;
+    // Tab target: the arrow flies at the locked monster's real position (allowing for the arrow's drop), so it hits
+    // unless the ground is in the way. Without a target it goes where the crosshair points.
+    const lock = d.tid != null ? this.animals.get(d.tid) : null;
+    if (lock && Math.hypot(lock.x - ox, lock.z - oz) < 45) { const tx = lock.x - ox, tz = lock.z - oz, h = Math.hypot(tx, tz), ty = lock.y + .6 - oy + .0015 * h * h; len = Math.hypot(tx, ty, tz); d = { dx: tx, dy: ty, dz: tz }; }
     this.take(p, 'arrow', 1); this.wear(p);
-    const dx = d.dx / len, dy = d.dy / len, dz = d.dz / len, ox = p.x, oy = p.y + 1.4, oz = p.z;
+    const dx = d.dx / len, dy = d.dy / len, dz = d.dz / len;
     let dist = 60, hit = null;
     outer: for (let t = 1; t < 60; t += 0.5) {
       const x = ox + dx * t, y = oy + dy * t - 0.0015 * t * t, z = oz + dz * t;
       if (y < heightAt(x, z)) { dist = t; break; }
-      for (const a of this.animals.values()) if (Math.hypot(a.x - x, a.y + .6 - y, a.z - z) < 1.1) { hit = a; dist = t; break outer; }
+      for (const a of this.animals.values()) if (Math.hypot(a.x - x, a.y + .6 - y, a.z - z) < (a === lock ? 1.6 : 1.1)) { hit = a; dist = t; break outer; }
     }
     this.io.to('game').volatile.emit('arrow', { o: [r2(ox), r2(oy), r2(oz)], d: [dx, dy, dz], len: dist });
     if (hit) { const [dmg, sk] = this.dmgOf(p); this.hitAnimal(hit, dmg * mul, p, sk); }

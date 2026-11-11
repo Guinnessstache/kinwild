@@ -60,6 +60,12 @@ Each player picks a name and a PIN. Same name + PIN brings the character back on
 
 The "Next step" box walks new players through 19 steps from punching a tree to forging iron.
 
+## Build 12 changes
+
+- **Tab targeting.** Tab locks onto the nearest monster in front of you (Tab again for the next, Shift+Tab back). A red marker floats over it and a frame at the top shows its name, level, health and distance. Controller: tap **LT** to target (hold LT to sneak).
+- With a target, **bow arrows fly straight at it** (within 45 m, unless a hill is in the way), including Aimed Shot. Melee swings, spear Power Strike and staff zaps go to the target when it's close enough.
+- The bag moved to **I** only (Tab is now targeting).
+
 ## Build 11 changes
 
 - **Short Walls** (2 m, wood and stone) in the Walls and Stone tabs. Aim at a wall and the short wall sits on top of it — use them to fill the gap under a ridge or a higher row of roof slopes. The roof's end triangle then closes the rest.

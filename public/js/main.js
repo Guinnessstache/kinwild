@@ -199,7 +199,7 @@ function start(init) {
 // ---------- network events ----------
 sock.on('p+', addPlayer); sock.on('p-', id => { const p = S.players.get(id); if (p) { scene.remove(p.char); S.players.delete(id); } });
 sock.on('pu', p => { if (p.id === S.id) refreshMe(p); else if (S.me) addPlayer(p); });
-sock.on('a+', a => S.me && addAnimal(a)); sock.on('a-', id => { const a = S.animals.get(id); if (a) { puff(a.g.position.x, a.g.position.y + .5, a.g.position.z, '#ffffff', 10); scene.remove(a.g); S.animals.delete(id); } });
+sock.on('a+', a => S.me && addAnimal(a)); sock.on('a-', id => { if (id === S.lock) S.lock = null; const a = S.animals.get(id); if (a) { puff(a.g.position.x, a.g.position.y + .5, a.g.position.z, '#ffffff', 10); scene.remove(a.g); S.animals.delete(id); } });
 sock.on('s', sn => {
   if (!S.me) return; S.time = sn.t;
   for (const [id, x, y, z, r, a, held] of sn.p) { const p = S.players.get(id); if (p) { p.tx = x; p.ty = y; p.tz = z; p.tr = r; p.a = a; G.setHeld(p.char, held || null, ITEMS[held]); } }
@@ -245,7 +245,8 @@ addEventListener('keydown', e => {
   if (e.repeat) return; S.keys[e.code] = true;
   if (e.code === 'Escape') { if (performance.now() - lockLostT < 400) return; escT = performance.now(); if (S.build) stopBuild(); else if (ui.tab) ui.close(); else ui.open('menu'); return; }
   if (e.code === 'Enter') { $('chatin').focus(); document.exitPointerLock?.(); e.preventDefault(); return; }       // focus first so losing the mouse capture is not read as Esc
-  const tabs = { Tab: 'bag', KeyI: 'bag', KeyC: 'craft', KeyB: 'build', KeyG: 'clan', KeyM: 'map', KeyH: 'help', KeyP: 'who' };
+  if (e.code === 'Tab') { cycleTarget(e.shiftKey ? -1 : 1); return; }
+  const tabs = { KeyI: 'bag', KeyC: 'craft', KeyB: 'build', KeyG: 'clan', KeyM: 'map', KeyH: 'help', KeyP: 'who' };
   if (e.code === 'KeyB' && !ui.tab) { if (S.build) stopBuild(); else startBuild(); return; }
   if (tabs[e.code]) { if (S.build) stopBuild(); ui.open(tabs[e.code]); return; }
   if (ui.tab) { if (e.code.startsWith('Digit')) { const n = +e.code.slice(5); if (n >= 1 && n <= 8) ui.numKey(n - 1); } return; }
@@ -297,6 +298,29 @@ addEventListener('mousemove', e => { if (document.pointerLockElement === canvas 
 function pitchLim() { return S.fly || S.view === 'first' ? [-1.45, 1.45] : [-.25, 1.35]; }
 addEventListener('wheel', e => { if (!playing() || !e.deltaY) return; if (S.build) cyclePiece(e.deltaY > 0 ? 1 : -1); else select(S.sel + (e.deltaY > 0 ? 1 : -1)); }, { passive: true });
 
+// ---------- tab targeting ----------
+// Tab (controller: tap LT) locks onto the nearest monster in front of you; pressing again moves to the next one.
+// Arrows then fly straight at it, and melee, staff and abilities use it when it is close enough.
+const lockMark = new THREE.Mesh(new THREE.ConeGeometry(.3, .7, 4), new THREE.MeshBasicMaterial({ color: '#ff4040', depthTest: false })); lockMark.rotation.x = Math.PI; lockMark.renderOrder = 6; lockMark.visible = false; scene.add(lockMark);
+function lockedAnimal() { const a = S.animals.get(S.lock); if (!a) { S.lock = null; return null; } if (Math.hypot(a.g.position.x - me.x, a.g.position.z - me.z) > 50) { S.lock = null; ui.toast('Target out of range'); return null; } return a; }
+function cycleTarget(dir = 1) {
+  const [fx, fz] = fwd();
+  const list = [...S.animals.values()].map(a => { const p = a.g.position, dx = p.x - me.x, dz = p.z - me.z, d = Math.hypot(dx, dz); return { a, d, dot: d < .1 ? 1 : (dx * fx + dz * fz) / d }; })
+    .filter(o => o.d < 40 && (o.dot > .3 || o.d < 8)).sort((p, q) => p.d - q.d);
+  if (!list.length) { S.lock = null; return ui.toast('No monsters nearby to target'); }
+  const i = list.findIndex(o => o.a.id === S.lock); S.lock = list[i < 0 ? 0 : (i + dir + list.length) % list.length].a.id; sound('pick'); targetFrame();
+}
+function targetFrame() {
+  const a = S.lock != null && lockedAnimal(); if (!a) { $('tframe').innerHTML = ''; return; }
+  const d = Math.round(Math.hypot(a.g.position.x - me.x, a.g.position.z - me.z)), p = padUI();
+  $('tframe').innerHTML = `<span style="color:${conColor(a.L, myLevel())}">🎯 ${mobName(ANIMALS[a.t].n, a.L)} · Lv ${a.L}</span><span class="mobhp"><i style="width:${a.hp ?? 100}%"></i></span><small>${d} m ${heldDef()?.tool === 'bow' && d > 45 ? '— too far for the bow' : ''} · <kbd>${p ? 'LT' : 'Tab'}</kbd> next</small>`;
+}
+function shootAt(a, ab) {         // fire at the locked monster: the server aims the arrow itself
+  const p = a.g.position, dx = p.x - me.x, dy = p.y + .6 - me.y - 1.4, dz = p.z - me.z, l = Math.hypot(dx, dy, dz) || 1;
+  swingAnim(); me.yaw = Math.atan2(dx, dz); sound('bow'); emit('shoot', { dx: dx / l, dy: dy / l, dz: dz / l, tid: a.id, ...(ab ? { ab: 1 } : {}) });
+}
+const lockInBow = () => { const a = S.lock != null && lockedAnimal(); return a && Math.hypot(a.g.position.x - me.x, a.g.position.z - me.z) <= 45 ? a : null; };
+
 // ---------- actions ----------
 const fwd = () => [-Math.sin(cam.yaw), -Math.cos(cam.yaw)];
 function swingAnim() { me.char.userData.swing = 1; me.yaw = Math.atan2(...fwd()); me.lastSwing = performance.now(); }
@@ -314,13 +338,13 @@ function useStruct(s) {
 function primary() {
   if (S.build) return placeBuild();
   const def = heldDef(), t = S.target;
-  if (def?.tool === 'bow') { if (performance.now() - me.lastSwing < atkSpd('bow') * 1000) return; swingAnim(); sound('bow'); const aim = aimPoint(), from = new THREE.Vector3(me.x, me.y + 1.4, me.z), dist = aim.distanceTo(from); aim.y += .0015 * dist * dist; aim.sub(from).normalize(); return emit('shoot', { dx: aim.x, dy: aim.y, dz: aim.z }); }
+  if (def?.tool === 'bow') { if (performance.now() - me.lastSwing < atkSpd('bow') * 1000) return; const la = lockInBow(); if (la) return shootAt(la); swingAnim(); sound('bow'); const aim = aimPoint(), from = new THREE.Vector3(me.x, me.y + 1.4, me.z), dist = aim.distanceTo(from); aim.y += .0015 * dist * dist; aim.sub(from).normalize(); return emit('shoot', { dx: aim.x, dy: aim.y, dz: aim.z }); }
   if (def?.tool === 'rod') {
     if (S.fishing || performance.now() - me.lastSwing < 700) return; const [fx, fz] = fwd();
     for (let d = 2; d <= 8; d += 1) if (heightAt(me.x + fx * d, me.z + fz * d) < -.1) { swingAnim(); return emit('fish', { x: me.x + fx * d, z: me.z + fz * d }, r => { if (r?.ok) { S.fishing = true; ui.toast('Line is out… stand still and wait for a bite'); } else if (r?.err) ui.toast(r.err); }); }
     return ui.toast('Face the water to cast');
   }
-  if (def?.tool === 'staff') { if (performance.now() - me.lastSwing < 1350) return; swingAnim(); return emit('heal', { id: t?.k === 'a' ? t.a.id : null }, r => { if (r?.ok === 'heal') { sound('eat'); if (r.name) ui.feed(`✨ Healed ${r.name}`); } else if (r?.ok === 'bolt') sound('bow'); }); }
+  if (def?.tool === 'staff') { if (performance.now() - me.lastSwing < 1350) return; swingAnim(); return emit('heal', { id: (S.lock != null && lockedAnimal()?.id) ?? (t?.k === 'a' ? t.a.id : null) }, r => { if (r?.ok === 'heal') { sound('eat'); if (r.name) ui.feed(`✨ Healed ${r.name}`); } else if (r?.ok === 'bolt') sound('bow'); }); }
   const plot = t?.k === 's' && t.s.t === 'farm_plot';
   if (def && (def.food || def.heal || def.slot || def.learn || def.tool === 'water') && !plot) return emit('useItem', { slot: S.sel }, r => { if (r?.ok) sound('eat'); });
   if (performance.now() - me.lastSwing < (t?.k === 'a' ? atkSpd(def?.tool) * 1000 : 400)) return;       // weapons have attack speeds against monsters
@@ -336,7 +360,7 @@ function ability() {
   const def = heldDef(), tool = def?.tool, cl = CLASSES[tool]; if (!cl || S.build || ui.tab) return;
   if (performance.now() < (S.cd[tool] || 0)) return ui.toast(`${cl[3]} is not ready yet`);
   const done = r => { if (r?.ok) { S.cd[tool] = performance.now() + ABIL_CD[tool] * 1000; sound('lvl'); } else if (r?.err) ui.toast(r.err, 'bad'); };
-  if (tool === 'bow') { me.lastSwing = 0; swingAnim(); sound('bow'); const aim = aimPoint(), from = new THREE.Vector3(me.x, me.y + 1.4, me.z), dist = aim.distanceTo(from); aim.y += .0015 * dist * dist; aim.sub(from).normalize(); emit('shoot', { dx: aim.x, dy: aim.y, dz: aim.z, ab: 1 }); return done({ ok: 1 }); }
+  if (tool === 'bow') { me.lastSwing = 0; const la = lockInBow(); if (la) { shootAt(la, true); return done({ ok: 1 }); } swingAnim(); sound('bow'); const aim = aimPoint(), from = new THREE.Vector3(me.x, me.y + 1.4, me.z), dist = aim.distanceTo(from); aim.y += .0015 * dist * dist; aim.sub(from).normalize(); emit('shoot', { dx: aim.x, dy: aim.y, dz: aim.z, ab: 1 }); return done({ ok: 1 }); }
   if (tool === 'spear' && S.target?.k !== 'a') return ui.toast('Get close to a monster first');
   swingAnim(); emit('ability', { id: S.target?.k === 'a' ? S.target.a.id : null }, done);
 }
@@ -523,6 +547,7 @@ function refreshCaps(x, z) {
 function nextPiece() { const l = S.hamList; if (!l || l.length < 2) return; const i = l.findIndex(o => o.s.id === (S.target?.s?.id)); S.hamSel = l[(i + 1) % l.length].s.id; sound('pick'); }
 function findTarget() {
   const [fx, fz] = fwd(), def = heldDef(), hammer = def?.tool === 'hammer'; let best = null, bs = 1e9;
+  const la = S.lock != null && !hammer && lockedAnimal(); if (la) { const p = la.g.position; if (Math.hypot(p.x - me.x, p.z - me.z) <= (def?.reach || 2.6) + 1) return { k: 'a', a: la, x: p.x, y: p.y, z: p.z, r: .7 }; }
   if (hammer) { const a = buildAim(), s = a?.s; return s ? { k: 's', s, x: s.x, y: s.y, z: s.z, r: 1.2 } : null; }      // the hammer works on exactly the piece under the dot
   const consider = (x, z, reach, obj, bias = 0) => { const dx = x - me.x, dz = z - me.z, d = Math.hypot(dx, dz); if (d > reach) return; const dot = d < .01 ? 1 : (dx * fx + dz * fz) / d; if (dot < .1 && d > 1.4) return; const sc = d - dot * 1.6 + bias; if (sc < bs) { bs = sc; best = obj; } };
   for (const a of S.animals.values()) consider(a.g.position.x, a.g.position.z, (def?.reach || 2.6) + 1, { k: 'a', a, x: a.g.position.x, y: a.g.position.y, z: a.g.position.z, r: .7 }, def?.dmg > 2 ? -1.5 : 0);
@@ -594,7 +619,7 @@ function drawMap(c) {
 
 // ---------- gamepad ----------
 // Standard (Xbox-style) layout. In the world it drives the character; with a panel open it moves a highlight around the menu.
-const KEYS_KB = $('keys').innerHTML, KEYS_PAD = '<span><b>Y</b> Bag</span> <span><b>X</b> Use</span> <span><b>RT</b> Action</span> <span><b>A</b> Jump</span> <span><b>B</b> Ability</span> <span><b>LB RB</b> Items</span> <span><b>↑</b> Craft</span> <span><b>→</b> Build</span> <span><b>R3</b> 1st person</span> <span><b>←</b> Players</span> <span><b>↓</b> Map</span> <span><b>Start</b> Menu</span>';
+const KEYS_KB = $('keys').innerHTML, KEYS_PAD = '<span><b>Y</b> Bag</span> <span><b>X</b> Use</span> <span><b>RT</b> Action</span> <span><b>A</b> Jump</span> <span><b>LT</b> Target</span> <span><b>B</b> Ability</span> <span><b>LB RB</b> Items</span> <span><b>↑</b> Craft</span> <span><b>→</b> Build</span> <span><b>R3</b> 1st person</span> <span><b>←</b> Players</span> <span><b>↓</b> Map</span> <span><b>Start</b> Menu</span>';
 let keysPad = false;
 const pad = { lastT: -1e9, mx: 0, mz: 0, run: false, jump: false, rt: false, prev: [], seen: false, navT: 0, navHeld: false, el: null, pt: null };
 const dead = v => Math.abs(v) < .2 ? 0 : (v - Math.sign(v) * .2) / .8;
@@ -641,7 +666,7 @@ function pollPad(dt) {
   if (hit(2)) { if (S.build) { S.build.r = (S.build.r + 1) % 4; S.build.turned = true; } else interact(); }
   if (hit(3)) { if (S.build) removeAimed(); else ui.open('bag'); }
   if (hit(1)) { if (S.build) stopBuild(); else ability(); }
-  if (hit(6) && !S.fly) { S.sneak = !S.sneak; ui.toast(S.sneak ? 'Sneaking…' : 'Standing up'); }
+  if (!S.fly) { if (b[6]) { pad.lt = (pad.lt || 0) + dt; if (pad.lt > .45 && !pad.ltDone) { pad.ltDone = true; S.sneak = !S.sneak; ui.toast(S.sneak ? 'Sneaking…' : 'Standing up'); } } else { if (pad.lt > 0 && !pad.ltDone) cycleTarget(1); pad.lt = 0; pad.ltDone = false; } }
   if (hit(4)) { if (S.build) cyclePiece(-1); else select(S.sel - 1); } if (hit(5)) { if (S.build) cyclePiece(1); else select(S.sel + 1); }
   if (hit(11)) { if (S.build) toggleFly(); else toggleView(); }
   if (S.build && (hit(14) || hit(15))) { pickCat((catOf(S.build.t) + (hit(15) ? 1 : -1) + BUILD_CATS.length) % BUILD_CATS.length); pad.prev = b; return; }
@@ -806,6 +831,7 @@ function frame() {
     for (const s of S.structs.values()) { const u = s.g.userData; if (u.flame) { const k = 1 + Math.sin(time * 11 + s.id) * .12 + Math.sin(time * 23 + s.id) * .08; u.flame.scale.set(k, 1 + Math.sin(time * 15 + s.id) * .2, k); } }
     // targeting + prompt
     S.target = S.build ? null : findTarget();
+    { const la = S.lock != null && S.animals.get(S.lock); lockMark.visible = !!la; if (la) { lockMark.position.set(la.g.position.x, la.g.position.y + 1.9 * la.g.scale.y + Math.sin(time * 4) * .12, la.g.position.z); lockMark.rotation.y = time * 2; } }
     if (!S.build) { const hs = heldDef()?.tool === 'hammer' && S.target?.s; hiBox.visible = !!hs; if (hs) hiBox.setFromObject(hs.g); }
     if (S.target && !(S.target.k === 's' && heldDef()?.tool === 'hammer')) { const t = S.target; ring.visible = true; ring.position.set(t.x, Math.max(t.y, groundAt(t.x, t.z, me.y + 2)) + .12, t.z); ring.scale.setScalar(t.r * (1 + Math.sin(time * 5) * .05)); } else ring.visible = false;
     if (S.build) {
@@ -816,7 +842,7 @@ function frame() {
     }
     netT += dt; if (netT > .08) { netT = 0; const m = [+me.x.toFixed(2), +me.y.toFixed(2), +me.z.toFixed(2), +me.yaw.toFixed(2), me.mode]; const key = m.join(); if (key !== lastSent) { lastSent = key; sock.volatile.emit('mv', m); } }
     slowT += dt; if (slowT > .25) {
-      slowT = 0; $('prompt').innerHTML = ui.tab ? '' : promptFor(S.target); $('bStam').style.width = S.stam + '%'; drawMini();
+      slowT = 0; targetFrame(); $('prompt').innerHTML = ui.tab ? '' : promptFor(S.target); $('bStam').style.width = S.stam + '%'; drawMini();
       // zone, class ability and buff readouts
       const zo = zoneAt(me.x, me.z), zn = zo.name;
       if (S.zone !== zn) { if (S.zone) ui.toast(`Entering ${zn} — monsters level ${zo.lo}–${zo.hi}`, zo.lo > myLevel() + 1 ? 'bad' : ''); S.zone = zn; }

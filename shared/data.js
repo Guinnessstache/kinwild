@@ -66,6 +66,8 @@ export const ITEMS = {
   berry_juice: BUFF(F('Berry Juice', '🧃', 8, 45, 5, true), { speed: 8 }, 300), stew: BUFF(F('Hearty Stew', '🍲', 60, 25, 20, true), { hp: 20, pow: 10 }, 900),
   pumpkin_pie: BUFF(F('Pumpkin Pie', '🥧', 70, 0, 25, true), { hp: 30, pow: 15, mend: 15 }, 1200),
   hunters_feast: BUFF(F("Hunter's Feast", '🍱', 90, 30, 30, true), { hp: 45, pow: 22, mend: 22, speed: 6 }, 1800),
+  // potions: refill mana or energy straight away (one potion every 8 seconds)
+  mana_potion: { n: 'Mana Potion', i: '🧪', pot: { mp: 60 } }, energy_tonic: { n: 'Energy Tonic', i: '🍹', pot: { en: 60 } },
   // seeds
   wheat_seeds: { n: 'Wheat Seeds', i: '🌱', seed: 'wheat' }, carrot_seeds: { n: 'Carrot Seeds', i: '🌱', seed: 'carrot' },
   potato_seeds: { n: 'Potato Seeds', i: '🌱', seed: 'potato' }, pumpkin_seeds: { n: 'Pumpkin Seeds', i: '🌱', seed: 'pumpkin' },
@@ -96,7 +98,12 @@ for (const k of ['stone_spear', 'iron_sword', 'bow', 'wood_staff', 'iron_spear',
 
 // ---- classes, stats, zones ----
 export const QUAL = [['Common', '#d9d2c2'], ['Fine', '#6fd36f'], ['Superior', '#5aa9ff'], ['Epic', '#c77dff']];
-export const STAT_N = { dmg: 'Damage', arm: 'Armor', hp: 'Health', pow: 'Power', mend: 'Healing', speed: 'Speed' };
+export const STAT_N = { dmg: 'Damage', arm: 'Armor', hp: 'Health', pow: 'Power', mend: 'Healing', speed: 'Speed', mreg: 'Mana Regen', ereg: 'Energy Regen' };
+// Mana pays for bows and staffs, energy for swords and spears. Both refill on their own (gear with Mana / Energy Regen
+// speeds that up) or straight away with a potion.
+export const MANA_REGEN = 3, ENERGY_REGEN = 6;       // per second at 100%
+export const COST = { bow: ['mp', 5], staff: ['mp', 8], heal: ['mp', 10], sword: ['en', 7], spear: ['en', 8] };
+export const ABIL_COST = { bow: ['mp', 15], staff: ['mp', 30], sword: ['en', 20], spear: ['en', 25] };
 // your class follows the weapon in your hand: [name, role, icon, ability]
 export const CLASSES = { sword: ['Guardian', 'Tank', '🛡️', 'Taunt'], spear: ['Striker', 'Melee DPS', '⚔️', 'Power Strike'], bow: ['Ranger', 'Ranged DPS', '🏹', 'Aimed Shot'], staff: ['Mender', 'Healer', '✨', 'Group Heal'] };
 export const ABIL_CD = { sword: 12, spear: 8, bow: 8, staff: 20 };
@@ -113,7 +120,7 @@ export const atkSpd = tool => ATK_SPD[tool] || .7;
 export const conColor = (mob, me) => { const d = mob - me; return d < -2 ? '#9a9a9a' : d === -2 ? '#4caf50' : d === -1 ? '#4a90e2' : d === 0 ? '#ffffff' : d === 1 ? '#f5d142' : '#e5484d'; };
 export const gearSt = it => (it && (it.st || ITEMS[it.id]?.base)) || {};
 export function calcStats(equip, skills, buff, held) {
-  const s = { arm: 0, hp: 100 + 4 * ((skills.defense?.l || 1) - 1), pow: 0, mend: 0, speed: 0, set: null }, mats = {};
+  const s = { arm: 0, hp: 100 + 4 * ((skills.defense?.l || 1) - 1), pow: 0, mend: 0, speed: 0, mreg: 0, ereg: 0, set: null }, mats = {};
   for (const k of ['head', 'chest', 'legs']) { const it = equip[k]; if (!it || !ITEMS[it.id]) continue; const st = gearSt(it); for (const a in st) if (a in s) s[a] += st[a]; const m = ITEMS[it.id].mat; mats[m] = (mats[m] || 0) + 1; }
   for (const m in mats) if (mats[m] === 3) { s.set = m; s[SET_BONUS[m][0]] += SET_BONUS[m][1]; }
   if (held && ITEMS[held.id]?.gear) { const st = gearSt(held); for (const a in st) if (a !== 'dmg' && a in s) s[a] += st[a]; }
@@ -182,6 +189,7 @@ export const RECIPES = [
   R('berry_juice', 1, { berries: 4 }, 'campfire', 2, 'cooking', 8), R('mushroom_soup', 1, { mushroom: 3 }, 'campfire', 2, 'cooking', 10),
   R('bread', 1, { wheat: 3 }, 'campfire', 3, 'cooking', 12), R('stew', 1, { raw_meat: 1, carrot: 1, potato: 1 }, 'campfire', 5, 'cooking', 20),
   R('pumpkin_pie', 1, { pumpkin: 1, wheat: 2 }, 'campfire', 8, 'cooking', 25),
+  R('mana_potion', 1, { mushroom: 2, berries: 2, clay: 1 }, 'campfire', 2, 'cooking', 10), R('energy_tonic', 1, { carrot: 1, berries: 2, clay: 1 }, 'campfire', 2, 'cooking', 10),
   R('iron_bar', 1, { iron_ore: 2, coal: 1 }, 'furnace', 3, 'crafting', 15), R('brick', 2, { clay: 2, wood: 1 }, 'furnace', 2, 'crafting', 8),
   R('nails', 4, { iron_bar: 1 }, 'anvil', 4), R('iron_axe', 1, { iron_bar: 2, stick: 2 }, 'anvil', 6, 'crafting', 40),
   R('iron_pickaxe', 1, { iron_bar: 3, stick: 2 }, 'anvil', 6, 'crafting', 40), R('iron_sword', 1, { iron_bar: 3, stick: 1, leather: 1 }, 'anvil', 8, 'crafting', 45),

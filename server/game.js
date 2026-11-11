@@ -1,6 +1,6 @@
 // Authoritative game simulation: everything that matters (items, skills, world state) is decided here.
 import crypto from 'crypto';
-import { ITEMS, RECIPES, STRUCTS, NODES, ANIMALS, CROPS, SKILLS, QUESTS, STATION_NAMES, xpNeed, DAY_LEN, MAX_LVL, lvlMods, atkSpd } from '../shared/data.js';
+import { ITEMS, RECIPES, STRUCTS, NODES, ANIMALS, CROPS, SKILLS, QUESTS, STATION_NAMES, xpNeed, DAY_LEN, MAX_LVL, lvlMods, atkSpd, COST, MANA_REGEN, ENERGY_REGEN } from '../shared/data.js';
 import { install, stk, distSpawn } from './rpg.js';
 import { heightAt, biomeAt, genNodes, zoneAt, SPAWN, HALF } from '../shared/terrain.js';
 const EDGE = HALF - 40;      // how far out anything may go
@@ -64,7 +64,7 @@ export class Game {
       try { const r = fn.call(this, p, d ?? {}); if (typeof ack === 'function') ack(r || {}); } catch (e) { console.error(ev, e); }
       this.flush(p);
     });
-    on('mv', this.onMove); on('sel', (p, d) => { p.sel = Math.max(0, Math.min(7, d.i | 0)); });
+    on('mv', this.onMove); on('sel', (p, d) => { p.sel = Math.max(0, Math.min(7, d.i | 0)); const max = this.maxHp(p); if (p.hp > max) p.hp = max; p._vit = p._misc = true; this.flush(p); });      // held gear can change max health
     on('swing', this.onSwing); on('shoot', this.onShoot); on('pick', this.onPick); on('sUse', this.onStructUse);
     on('drink', this.onDrink); on('useItem', this.onUseItem); on('invMove', this.onInvMove); on('trash', this.onTrash);
     on('craft', this.onCraft); on('place', this.onPlace); on('demolish', this.onDemolish); on('fish', this.onFish);
@@ -97,7 +97,7 @@ export class Game {
     this.fixGear(doc.inv); this.fixGear(Object.values(doc.equip));
     const old = this.players.get(pid);
     if (old) { old.socket.emit('kick', 'You logged in somewhere else'); this.players.delete(pid); old.socket.disconnect(true); }
-    const p = { ...doc, id: pid, socket, y: heightAt(doc.x, doc.z), r: 0, a: 0, sel: 0, lastSwing: 0, chest: null, fishing: null, clan: this.clanOf(pid), cd: {}, party: null, trade: null, voice: false, perm: this.perms[pid] || 'clan' };
+    const p = { ...doc, id: pid, socket, y: heightAt(doc.x, doc.z), mp: 100, en: 100, r: 0, a: 0, sel: 0, lastSwing: 0, chest: null, fishing: null, clan: this.clanOf(pid), cd: {}, party: null, trade: null, voice: false, perm: this.perms[pid] || 'clan' };
     this.players.set(pid, p); socket.join('game');
     socket.to('game').emit('p+', this.pub(p)); this.sys(`${p.name} joined`);
     this.refreshClan(p.clan);
@@ -112,7 +112,7 @@ export class Game {
   held(p) { return p.inv[p.sel]; }
   pub(p) { const c = this.clans[p.clan]; return { id: p.id, name: p.name, x: r2(p.x), y: r2(p.y), z: r2(p.z), r: p.r, look: p.look, tag: c?.tag || '', col: c?.color || '', armor: ITEMS[p.equip.chest?.id]?.mat || '', lv: this.plvl(p) }; }
   apub(a) { return { id: a.id, t: a.t, x: r2(a.x), y: r2(a.y), z: r2(a.z), r: a.ang, L: a.L, hp: Math.round(100 * a.hp / a.max) }; }
-  priv(p) { return { name: p.name, x: p.x, y: p.y, z: p.z, inv: p.inv, equip: p.equip, skills: p.skills, hp: p.hp, max: this.maxHp(p), hunger: p.hunger, thirst: p.thirst, quest: p.quest, look: p.look, known: p.known, buff: p.buff || null, recallAt: p.recallAt || 0, perm: p.perm }; }
+  priv(p) { return { name: p.name, x: p.x, y: p.y, z: p.z, inv: p.inv, equip: p.equip, skills: p.skills, hp: p.hp, mp: p.mp ?? 100, en: p.en ?? 100, max: this.maxHp(p), hunger: p.hunger, thirst: p.thirst, quest: p.quest, look: p.look, known: p.known, buff: p.buff || null, recallAt: p.recallAt || 0, perm: p.perm }; }
   spub(s) { return { ...s, d: this.pd(s), on: this.players.get(s.o)?.name || s.on, c: this.clanOf(s.o), cc: this.clans[this.clanOf(s.o)]?.color || '' }; }
   toast(p, m, k = '') { p.socket.emit('toast', { m, k }); }
   sys(m) { this.io.to('game').emit('chat', { ch: 'sys', m }); }
@@ -123,7 +123,7 @@ export class Game {
     if (p._inv) { u.inv = p.inv; u.equip = p.equip; u.max = this.maxHp(p); p._inv = false; if (p.trade) this.tradeTouch(p); }
     if (p._misc) { u.known = p.known; u.buff = p.buff || null; u.recallAt = p.recallAt || 0; u.perm = p.perm; u.max = this.maxHp(p); p._misc = false; }
     if (p._sk) { u.skills = p.skills; u.max = this.maxHp(p); p._sk = false; }
-    if (p._vit) { u.hp = p.hp; u.hunger = p.hunger; u.thirst = p.thirst; p._vit = false; }
+    if (p._vit) { u.hp = p.hp; u.hunger = p.hunger; u.thirst = p.thirst; u.mp = Math.round(p.mp); u.en = Math.round(p.en); p._vit = false; }
     if (p._q) { u.quest = p.quest; p._q = false; }
     if (Object.keys(u).length) p.socket.emit('me', u);
   }
@@ -185,7 +185,7 @@ export class Game {
   die(p, why) {
     const sp = p.spawn && this.structs.get(p.spawn.id) ? p.spawn : SPAWN;
     p.x = sp.x + 1.5; p.z = sp.z + 1.5; p.y = heightAt(p.x, p.z) + 0.5;
-    p.hp = this.maxHp(p) * .6; p.hunger = Math.max(p.hunger, 50); p.thirst = Math.max(p.thirst, 50); p._vit = true; p.fishing = null;
+    p.hp = this.maxHp(p) * .6; p.mp = p.en = 100; p.hunger = Math.max(p.hunger, 50); p.thirst = Math.max(p.thirst, 50); p._vit = true; p.fishing = null;
     p.socket.emit('tp', { x: p.x, y: p.y, z: p.z, msg: `${why} You wake up ${sp === SPAWN ? 'on the meadow' : 'at home'} — you kept all your things.` });
   }
   slow() {
@@ -194,6 +194,7 @@ export class Game {
       p.hunger = Math.max(0, p.hunger - 100 / (60 * 60)); p.thirst = Math.max(0, p.thirst - 100 / (45 * 60));      // full to empty: 60 min food, 45 min water
       const max = this.maxHp(p); if (p.hp > max) { p.hp = max; p._vit = true; }
       if (p.hunger > 30 && p.thirst > 30 && p.hp < max) p.hp = Math.min(max, p.hp + 0.7 + max * .002);
+      if (p.mp < 100 || p.en < 100) { const st = this.stats(p); p.mp = Math.min(100, p.mp + MANA_REGEN * (1 + st.mreg / 100)); p.en = Math.min(100, p.en + ENERGY_REGEN * (1 + st.ereg / 100)); p._vit = true; }
       if (p.buff && now > p.buff.until) { p.buff = null; p._misc = true; this.toast(p, 'Your meal buff wore off'); }
       if (p.trade && !this.near(p, this.players.get(p.trade.with) || { x: 1e9, z: 0 }, 14)) this.endTrade(p, 'Trade cancelled — too far apart');
       if (p.hunger <= 0 || p.thirst <= 0) { p.hp -= 0.6; if (p.hp <= 0) this.die(p, p.thirst <= 0 ? 'You got too thirsty.' : 'You got too hungry.'); }
@@ -235,6 +236,7 @@ export class Game {
     } else if (d.k === 'a') {
       if (now - (p.lastAtk || 0) < atkSpd(def?.tool) * 1000 - 120) return; p.lastAtk = now;       // each weapon has its own attack speed
       const a = this.animals.get(d.id); if (!a || !this.near(p, a, (def?.reach || 2.6) + 2)) return;
+      const c = COST[def?.tool]; if (c && c[0] === 'en' && !this.spend(p, ...c)) return;       // swords and spears use energy
       const [dmg, sk] = this.dmgOf(p); this.hitAnimal(a, dmg, p, sk); this.wear(p);
     }
   }
@@ -300,8 +302,10 @@ export class Game {
   onShoot(p, d) {
     const it = this.held(p); if (ITEMS[it?.id]?.tool !== 'bow') return;
     const now = Date.now(); if (now - p.lastSwing < atkSpd('bow') * 1000 - 120) return; p.lastSwing = now;
-    let mul = 1; if (d.ab && now >= (p.cd.bow || 0)) { mul = 2.5; p.cd.bow = now + 8000; }          // Aimed Shot
+    const ab = d.ab && now >= (p.cd.bow || 0), mul = ab ? 2.5 : 1;          // Aimed Shot
     if (this.count(p, 'arrow') < 1) return this.toast(p, 'No arrows! Craft some at a workbench.', 'bad');
+    if (!this.spend(p, 'mp', ab ? 15 : COST.bow[1])) return;       // every shot costs mana
+    if (ab) p.cd.bow = now + 8000;
     let len = Math.hypot(d.dx, d.dy, d.dz); if (!(len > 0.5 && len < 1.5)) return;
     const ox = p.x, oy = p.y + 1.4, oz = p.z;
     // Tab target: the arrow flies at the locked monster's real position (allowing for the arrow's drop), so it hits
@@ -381,6 +385,11 @@ export class Game {
       p.hunger = Math.min(100, p.hunger + def.food.h * m); p.thirst = Math.min(100, p.thirst + def.food.t * m); p.hp = Math.min(max, p.hp + def.food.hp);
       if (def.buff) { p.buff = { id: it.id, until: Date.now() + def.buff.t * 1000 }; p._misc = true; }
       it.n--; if (it.n <= 0) p.inv[s] = null; p._inv = p._vit = true; return { ok: 'eat' };
+    }
+    if (def.pot) {          // potions: one every 8 seconds
+      const k = Object.keys(def.pot)[0], now = Date.now(); if (now < (p.potT || 0)) return this.toast(p, `Wait ${Math.ceil((p.potT - now) / 1000)}s before the next potion`);
+      if (p[k] >= 100) return this.toast(p, k === 'mp' ? 'Your mana is already full' : 'Your energy is already full');
+      p[k] = Math.min(100, p[k] + def.pot[k]); p.potT = now + 8000; it.n--; if (it.n <= 0) p.inv[s] = null; p._inv = p._vit = true; return { ok: 'eat' };
     }
     if (def.heal) { if (p.hp >= max) return; p.hp = Math.min(max, p.hp + def.heal); it.n--; if (it.n <= 0) p.inv[s] = null; p._inv = p._vit = true; return { ok: 'eat' }; }
     if (def.learn) {

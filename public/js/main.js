@@ -1,6 +1,6 @@
 // Client: input, third-person controller, networking, and glue between the 3D world and the UI.
 import * as THREE from 'three';
-import { ITEMS, NODES, STRUCTS, ANIMALS, SKILLS, CLASSES, ABIL_CD, QUAL, conColor, combatLevel, calcStats, mobName, atkSpd } from '/shared/data.js';
+import { ITEMS, NODES, STRUCTS, ANIMALS, SKILLS, CLASSES, ABIL_CD, QUAL, conColor, combatLevel, calcStats, mobName, atkSpd, COST, ABIL_COST } from '/shared/data.js';
 import { heightAt, zoneAt, ZONES, SPAWN, HALF, SIZE } from '/shared/terrain.js';
 import * as G from './gfx.js';
 import { createUI } from './ui.js';
@@ -335,9 +335,15 @@ function useStruct(s) {
   const d = STRUCTS[s.t]; if (d.station && ui.tab !== 'craft') ui.open('craft');        // the server then sends the station's storage if you may use it
   emit('sUse', { id: s.id }, r => { if (r?.ok) sound(r.ok === 'drink' ? 'eat' : 'pick'); if (r?.ok === 'harvest') ui.toast('Harvested! 🌾', 'good'); if (r?.ok === 'water') ui.toast('Watered 💧 — it will grow faster', 'good'); if (r?.ok === 'drink') ui.toast('Ahh, fresh water! 💧', 'good'); });
 }
+// mana / energy: check before swinging so an empty bar doesn't play the attack for nothing (the server has the final say)
+let lowT = 0;
+function afford(kind, n) { if ((S.me[kind] ?? 100) >= n) return true; if (performance.now() - lowT > 2500) { lowT = performance.now(); ui.toast(kind === 'mp' ? 'Not enough mana 🔮 — wait a moment or drink a Mana Potion' : 'Not enough energy ⚡ — wait a moment or drink an Energy Tonic', 'bad'); } return false; }
 function primary() {
   if (S.build) return placeBuild();
   const def = heldDef(), t = S.target;
+  if (def?.tool === 'bow' && !afford('mp', COST.bow[1])) return;
+  if (def?.tool === 'staff' && !afford('mp', COST.staff[1])) return;
+  if (t?.k === 'a' && COST[def?.tool]?.[0] === 'en' && !afford('en', COST[def.tool][1])) return;
   if (def?.tool === 'bow') { if (performance.now() - me.lastSwing < atkSpd('bow') * 1000) return; const la = lockInBow(); if (la) return shootAt(la); swingAnim(); sound('bow'); const aim = aimPoint(), from = new THREE.Vector3(me.x, me.y + 1.4, me.z), dist = aim.distanceTo(from); aim.y += .0015 * dist * dist; aim.sub(from).normalize(); return emit('shoot', { dx: aim.x, dy: aim.y, dz: aim.z }); }
   if (def?.tool === 'rod') {
     if (S.fishing || performance.now() - me.lastSwing < 700) return; const [fx, fz] = fwd();
@@ -346,7 +352,7 @@ function primary() {
   }
   if (def?.tool === 'staff') { if (performance.now() - me.lastSwing < 1350) return; swingAnim(); return emit('heal', { id: (S.lock != null && lockedAnimal()?.id) ?? (t?.k === 'a' ? t.a.id : null) }, r => { if (r?.ok === 'heal') { sound('eat'); if (r.name) ui.feed(`✨ Healed ${r.name}`); } else if (r?.ok === 'bolt') sound('bow'); }); }
   const plot = t?.k === 's' && t.s.t === 'farm_plot';
-  if (def && (def.food || def.heal || def.slot || def.learn || def.tool === 'water') && !plot) return emit('useItem', { slot: S.sel }, r => { if (r?.ok) sound('eat'); });
+  if (def && (def.food || def.heal || def.pot || def.slot || def.learn || def.tool === 'water') && !plot) return emit('useItem', { slot: S.sel }, r => { if (r?.ok) sound('eat'); });
   if (performance.now() - me.lastSwing < (t?.k === 'a' ? atkSpd(def?.tool) * 1000 : 400)) return;       // weapons have attack speeds against monsters
   swingAnim();
   if (t?.k === 'a') { emit('swing', { k: 'a', id: t.a.id }); sound('chop'); }
@@ -359,6 +365,7 @@ function primary() {
 function ability() {
   const def = heldDef(), tool = def?.tool, cl = CLASSES[tool]; if (!cl || S.build || ui.tab) return;
   if (performance.now() < (S.cd[tool] || 0)) return ui.toast(`${cl[3]} is not ready yet`);
+  if (!afford(...ABIL_COST[tool])) return;
   const done = r => { if (r?.ok) { S.cd[tool] = performance.now() + ABIL_CD[tool] * 1000; sound('lvl'); } else if (r?.err) ui.toast(r.err, 'bad'); };
   if (tool === 'bow') { me.lastSwing = 0; const la = lockInBow(); if (la) { shootAt(la, true); return done({ ok: 1 }); } swingAnim(); sound('bow'); const aim = aimPoint(), from = new THREE.Vector3(me.x, me.y + 1.4, me.z), dist = aim.distanceTo(from); aim.y += .0015 * dist * dist; aim.sub(from).normalize(); emit('shoot', { dx: aim.x, dy: aim.y, dz: aim.z, ab: 1 }); return done({ ok: 1 }); }
   if (tool === 'spear' && S.target?.k !== 'a') return ui.toast('Get close to a monster first');
@@ -623,7 +630,7 @@ const KEYS_KB = $('keys').innerHTML, KEYS_PAD = '<span><b>Y</b> Bag</span> <span
 let keysPad = false;
 const pad = { lastT: -1e9, mx: 0, mz: 0, run: false, jump: false, rt: false, prev: [], seen: false, navT: 0, navHeld: false, el: null, pt: null };
 const dead = v => Math.abs(v) < .2 ? 0 : (v - Math.sign(v) * .2) / .8;
-const canRepeat = () => { const d = heldDef(); return !S.build && !ui.tab && !(d && (d.food || d.heal || d.slot || d.learn || d.tool === 'water')); };
+const canRepeat = () => { const d = heldDef(); return !S.build && !ui.tab && !(d && (d.food || d.heal || d.pot || d.slot || d.learn || d.tool === 'water')); };
 const navEls = () => { const r = S.me ? '#pbody' : '#loginForm'; return [...document.querySelectorAll(`${r} .slot, ${r} button:not(:disabled), ${r} .card:not(.off), ${r} input:not([type=color]), ${r} .sw b`)]; };
 const ctr = el => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
 function navFocus(el) { document.querySelectorAll('.gpfocus').forEach(e => e.classList.remove('gpfocus')); pad.el = el; if (!el) return; el.classList.add('gpfocus'); el.scrollIntoView({ block: 'nearest' }); pad.pt = ctr(el); }

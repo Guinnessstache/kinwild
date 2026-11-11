@@ -34,7 +34,7 @@ input:focus { outline: none; border-color: var(--gold); }
 .bar { position: relative; height: 20px; background: rgba(20,14,8,.65); border: 2px solid rgba(0,0,0,.45); border-radius: 10px; overflow: hidden; }
 .bar span { position: absolute; left: 6px; top: -1px; font-size: 13px; z-index: 1; }
 .bar i { display: block; height: 100%; width: 100%; border-radius: 8px; transition: width .4s; }
-.hp i { background: linear-gradient(#ff6b5a,#c0392b); } .food i { background: linear-gradient(#f5b041,#ca6f1e); } .water i { background: linear-gradient(#5dade2,#2471a3); } .stam i { background: linear-gradient(#b7e36a,#6aa82f); } .stam { height: 12px; } .stam span { display: none; }
+.hp i { background: linear-gradient(#ff6b5a,#c0392b); } .mana i { background: linear-gradient(#b48cff,#6c3fc9); } .energy i { background: linear-gradient(#ffe066,#e0a800); } .bar.stam { height: 10px; } .bar.stam span { display: none; } .food i { background: linear-gradient(#f5b041,#ca6f1e); } .water i { background: linear-gradient(#5dade2,#2471a3); } .stam i { background: linear-gradient(#b7e36a,#6aa82f); } .stam { height: 12px; } .stam span { display: none; }
 #right { right: 14px; top: 14px; width: 230px; display: grid; justify-items: end; gap: 6px; pointer-events: none; }
 #mini { border-radius: 50%; border: 4px solid #5a3f22; box-shadow: 0 4px 14px rgba(0,0,0,.45); background: #2a6f9e; }
 #clock { white-space: nowrap; background: var(--bg); border-radius: 10px; padding: 2px 10px; font-weight: 700; font-size: 13px; }

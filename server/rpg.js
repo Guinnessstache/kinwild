@@ -1,5 +1,5 @@
 // Classes, gear, containers, parties, trading, voice signalling and other systems, mixed into Game.
-import { ITEMS, STRUCTS, ANIMALS, SCROLLS, UPGRADE, ABIL_CD, WSKILL, calcStats, combatLevel, gearSt } from '../shared/data.js';
+import { ITEMS, STRUCTS, ANIMALS, SCROLLS, UPGRADE, ABIL_CD, WSKILL, COST, ABIL_COST, calcStats, combatLevel, gearSt } from '../shared/data.js';
 import { heightAt, zoneAt, SPAWN } from '../shared/terrain.js';
 
 const STACK = 99, HOUR = 3600000;
@@ -19,9 +19,14 @@ const methods = {
     const def = ITEMS[id], r = Math.random() - luck, q = r < .04 ? 3 : r < .17 ? 2 : r < .45 ? 1 : 0, qm = [1, 1.15, 1.3, 1.5][q], st = {};
     // base stats swing from -22% to +28%, and a roll can add bonus stats (one per quality step, plus a coin-flip extra)
     for (const k in def.base) { const v = def.base[k] * qm * (.78 + Math.random() * .5); st[k] = k === 'dmg' ? Math.round(v * 10) / 10 : Math.max(1, Math.round(v)); }
-    const pool = def.slot ? ['hp', 'pow', 'mend', 'arm'] : ['hp', 'pow', 'mend'], amt = { hp: 6, pow: 3, mend: 3, arm: 2 }, tm = def.tr === 2 ? 1.6 : 1;
+    const pool = def.slot ? ['hp', 'pow', 'mend', 'arm', 'mreg', 'ereg'] : ['hp', 'pow', 'mend', 'mreg', 'ereg'], amt = { hp: 6, pow: 3, mend: 3, arm: 2, mreg: 10, ereg: 10 }, tm = def.tr === 2 ? 1.6 : 1;
     for (let i = 0; i < q + (Math.random() < .5 ? 1 : 0); i++) { const k = pool[Math.floor(Math.random() * pool.length)]; st[k] = (st[k] || 0) + Math.max(1, Math.round(amt[k] * tm * (.7 + Math.random() * .6))); }
     const it = { id, n: 1, q, st }; if (def.dur) it.d = Math.round(def.dur * durMul * qm); return it;
+  },
+  spend(p, kind, n) {        // pay mana or energy; false (with a gentle reminder) when there is not enough
+    if (p[kind] >= n) { p[kind] -= n; p._vit = true; this.flush(p); return true; }
+    const now = Date.now(); if (now - (p._lowT || 0) > 2500) { p._lowT = now; this.toast(p, kind === 'mp' ? 'Not enough mana 🔮 — wait a moment or drink a Mana Potion' : 'Not enough energy ⚡ — wait a moment or drink an Energy Tonic', 'bad'); }
+    return false;
   },
   fixGear(list) {          // gear made before stats were random has none: roll it now (keeping its wear)
     for (const it of list) if (it && ITEMS[it.id]?.gear && !it.st) { const r = this.roll(it.id); it.q = r.q; it.st = r.st; if (it.d == null && r.d != null) it.d = r.d; }
@@ -87,6 +92,8 @@ const methods = {
   onAbility(p, d) {
     const it = this.held(p), tool = ITEMS[it?.id]?.tool, cd = ABIL_CD[tool], now = Date.now(); if (!cd || tool === 'bow') return;
     if (now < (p.cd[tool] || 0)) return { err: 'Not ready yet' };
+    if (tool === 'spear') { const a = this.animals.get(d.id); if (!a || !this.near(p, a, ITEMS[it.id].reach + 2)) return { err: 'No target in reach' }; }
+    if (!this.spend(p, ...ABIL_COST[tool])) return;
     if (tool === 'sword') {          // Taunt: nearby monsters attack you, and you take half damage for a few seconds
       let n = 0; for (const a of this.animals.values()) if (ANIMALS[a.t].mode !== 'flee' && this.near(p, a, 11)) { a.target = p.id; a.until = a.taunt = now + 8000; n++; }
       p.guard = now + 6000; this.fx('taunt', p.x, p.y + 1, p.z);
@@ -104,8 +111,9 @@ const methods = {
     const now = Date.now(); if (now - p.lastSwing < 1300) return; p.lastSwing = now;
     p.socket.to('game').volatile.emit('sw', p.id);
     let best = null, br = .97; for (const o of this.players.values()) if (this.near(p, o, 14)) { const r = o.hp / this.maxHp(o); if (r < br) { br = r; best = o; } }
-    if (best) { this.heal(p, best, 14); this.wear(p); return { ok: 'heal', name: best === p ? null : best.name }; }
+    if (best) { if (!this.spend(p, ...COST.heal)) return; this.heal(p, best, 14); this.wear(p); return { ok: 'heal', name: best === p ? null : best.name }; }
     const a = this.animals.get(d.id); if (!a || !this.near(p, a, 15)) return { ok: 'none' };
+    if (!this.spend(p, ...COST.staff)) return;
     this.io.to('game').volatile.emit('bolt', { o: [r2(p.x), r2(p.y + 1.5), r2(p.z)], t: [r2(a.x), r2(a.y + .6), r2(a.z)] });
     const [dmg, sk] = this.dmgOf(p); this.hitAnimal(a, dmg, p, sk); this.wear(p); return { ok: 'bolt' };
   },

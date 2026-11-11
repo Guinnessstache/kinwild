@@ -60,6 +60,14 @@ Each player picks a name and a PIN. Same name + PIN brings the character back on
 
 The "Next step" box walks new players through 19 steps from punching a tree to forging iron.
 
+## Build 15 changes
+
+- **Mana 🔮 and energy ⚡.** Two new bars under health. Bows and staffs use mana (arrow 5, staff zap 8, heal 10); swords and spears use energy (7–8 per hit on a monster). Axes, pickaxes and fists are free. Class abilities cost more (Aimed Shot 15 mana, Group Heal 30 mana, Taunt 20 energy, Power Strike 25 energy). Mana refills 3/s and energy 6/s on their own.
+- **Potions:** Mana Potion (2 mushroom, 2 berries, 1 clay) and Energy Tonic (1 carrot, 2 berries, 1 clay), cooked at a campfire (Cooking 2). Each refills 60 straight away; one potion every 8 seconds.
+- **New random gear stats:** Mana Regen and Energy Regen can roll as bonus stats on crafted and looted gear.
+- **Common gear** now has a light border too, so every piece of gear shows its quality.
+- Max health updates right away when you switch to a weapon with a Health bonus.
+
 ## Build 14 changes
 
 - **Monsters stay near home.** A monster only chases you about 32 m from where it lives. Past that it gives up, runs home (it can't be hurt on the way) and heals to full when it gets there. Wandering monsters drift back toward home too.

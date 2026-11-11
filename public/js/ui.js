@@ -33,7 +33,7 @@ export function createUI(S, act) {
     const it = S.me.inv[S.sel]; $('heldName').textContent = it ? ITEMS[it.id].n : '';
   }
   function vitals() {
-    $('bHp').style.width = Math.min(100, 100 * S.me.hp / (S.me.max || 100)) + '%'; $('hpTxt').textContent = `${Math.max(0, Math.round(S.me.hp))} / ${S.me.max || 100}`; $('bFood').style.width = S.me.hunger + '%'; $('bWater').style.width = S.me.thirst + '%'; $('bStam').style.width = S.stam + '%';
+    $('bHp').style.width = Math.min(100, 100 * S.me.hp / (S.me.max || 100)) + '%'; $('hpTxt').textContent = `${Math.max(0, Math.round(S.me.hp))} / ${S.me.max || 100}`; $('bFood').style.width = S.me.hunger + '%'; $('bWater').style.width = S.me.thirst + '%'; $('foodTxt').textContent = `${Math.round(S.me.hunger)} food`; $('waterTxt').textContent = `${Math.round(S.me.thirst)} water`; $('bStam').style.width = S.stam + '%';
     const mp = S.me.mp ?? 100, en = S.me.en ?? 100; $('bMana').style.width = mp + '%'; $('mpTxt').textContent = `${Math.round(mp)} mana`; $('bEn').style.width = en + '%'; $('enTxt').textContent = `${Math.round(en)} energy`;
   }
   function quest() {

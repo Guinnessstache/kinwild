@@ -135,7 +135,7 @@ export const NODES = {
   pebbles: { n: 'Loose Stones', pick: true, verb: 'Pick up', skill: 'mining', xp: 5, respawn: 200, drops: [['stone', 2, 3, 1], ['flint', 1, 1, .5]] },
   branch: { n: 'Fallen Branch', pick: true, verb: 'Pick up', skill: 'woodcutting', xp: 5, respawn: 200, drops: [['stick', 2, 4, 1], ['wood', 1, 1, .3]] },
   bush: { n: 'Berry Bush', pick: true, verb: 'Pick', skill: 'foraging', xp: 6, respawn: 240, drops: [['berries', 2, 4, 1]] },
-  fiber: { n: 'Tall Grass', pick: true, verb: 'Gather', skill: 'foraging', xp: 5, respawn: 180, drops: [['fiber', 2, 3, 1], ['wheat_seeds', 1, 1, .15], ['flax_seeds', 1, 1, .15]] },
+  fiber: { n: 'Tall Grass', pick: true, verb: 'Gather', skill: 'foraging', xp: 5, respawn: 90, drops: [['fiber', 2, 3, 1], ['wheat_seeds', 1, 1, .15], ['flax_seeds', 1, 1, .15]] },
   mushroom: { n: 'Mushrooms', pick: true, verb: 'Pick', skill: 'foraging', xp: 6, respawn: 260, drops: [['mushroom', 1, 3, 1]] },
   clay: { n: 'Clay Deposit', pick: true, verb: 'Dig', skill: 'mining', xp: 6, respawn: 260, drops: [['clay', 2, 3, 1]] },
   wild_carrot: { n: 'Wild Carrots', pick: true, verb: 'Pull up', skill: 'foraging', xp: 8, respawn: 400, drops: [['carrot', 1, 2, 1], ['carrot_seeds', 1, 2, 1]] },

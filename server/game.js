@@ -189,7 +189,7 @@ export class Game {
   slow() {
     const now = Date.now();
     for (const p of this.players.values()) {
-      p.hunger = Math.max(0, p.hunger - 100 / (26 * 60)); p.thirst = Math.max(0, p.thirst - 100 / (18 * 60));
+      p.hunger = Math.max(0, p.hunger - 100 / (60 * 60)); p.thirst = Math.max(0, p.thirst - 100 / (45 * 60));      // full to empty: 60 min food, 45 min water
       const max = this.maxHp(p); if (p.hp > max) { p.hp = max; p._vit = true; }
       if (p.hunger > 30 && p.thirst > 30 && p.hp < max) p.hp = Math.min(max, p.hp + 0.7 + max * .002);
       if (p.buff && now > p.buff.until) { p.buff = null; p._misc = true; this.toast(p, 'Your meal buff wore off'); }

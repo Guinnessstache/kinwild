@@ -129,3 +129,4 @@ h3 { margin: 0 0 8px; color: var(--gold); font: 700 17px Georgia, serif; } h3 sm
 .slot .ic .svgi, .card .ic .svgi, .rec .ic .svgi { width: 1.2em; height: 1.2em; }
 
 #bigmap { max-height: calc(100vh - 290px); width: auto; aspect-ratio: 1; }
+#quest:empty { display: none; }

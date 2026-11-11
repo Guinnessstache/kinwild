@@ -97,10 +97,10 @@ export const SPAWN = (() => {
 })();
 
 const TABLE = {
-  forest: [['pine', .2], ['oak', .15], ['birch', .1], ['bush', .05], ['mushroom', .05], ['branch', .05], ['fiber', .05], ['rock', .02], ['pebbles', .02]],
-  meadow: [['oak', .04], ['birch', .03], ['fiber', .08], ['bush', .045], ['pebbles', .05], ['branch', .04], ['rock', .025], ['wild_carrot', .012], ['wild_potato', .012], ['wild_pumpkin', .008], ['wild_corn', .01], ['mushroom', .01]],
-  rock: [['rock', .14], ['iron', .07], ['coal', .06], ['pine', .05], ['pebbles', .04]],
-  beach: [['clay', .08], ['pebbles', .05], ['fiber', .04]],
+  forest: [['pine', .2], ['oak', .15], ['birch', .1], ['bush', .05], ['mushroom', .05], ['branch', .05], ['fiber', .1], ['rock', .02], ['pebbles', .02]],
+  meadow: [['oak', .04], ['birch', .03], ['fiber', .18], ['bush', .045], ['pebbles', .05], ['branch', .04], ['rock', .025], ['wild_carrot', .012], ['wild_potato', .012], ['wild_pumpkin', .008], ['wild_corn', .01], ['mushroom', .01]],
+  rock: [['rock', .14], ['iron', .07], ['coal', .06], ['pine', .05], ['pebbles', .04], ['fiber', .04]],
+  beach: [['clay', .08], ['pebbles', .05], ['fiber', .08]],
 };
 const FROST_TREES = { oak: 'pine', birch: 'pine' }, DARK_TREES = { birch: 'pine' };
 export function genNodes() {

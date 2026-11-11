@@ -37,7 +37,7 @@ export function createUI(S, act) {
   }
   function quest() {
     const q = QUESTS[S.me.quest];
-    $('quest').innerHTML = q ? `<b>Next step ${S.me.quest + 1}/${QUESTS.length}</b>${esc(q.t)}${q.have ? ` <span style="color:var(--gold)">(${Math.min(count(q.have[0]), q.have[1])}/${q.have[1]})</span>` : ''}` : '<b>All steps done!</b>The island is yours. Keep building!';
+    $('quest').innerHTML = q ? `<b>Next step ${S.me.quest + 1}/${QUESTS.length}</b>${esc(q.t)}${q.have ? ` <span style="color:var(--gold)">(${Math.min(count(q.have[0]), q.have[1])}/${q.have[1]})</span>` : ''}` : '';          // tutorial finished: the box goes away
   }
   function toast(m, k = '') {
     const d = document.createElement('div'); d.className = 'toast ' + k; d.textContent = m; $('toasts').appendChild(d);

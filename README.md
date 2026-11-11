@@ -60,6 +60,12 @@ Each player picks a name and a PIN. Same name + PIN brings the character back on
 
 The "Next step" box walks new players through 19 steps from punching a tree to forging iron.
 
+## Build 13 changes
+
+- The tutorial box under the minimap disappears once every step is done.
+- More than twice as much tall grass (plant fiber) everywhere, including some on beaches and rocky ground, and it grows back in 1.5 minutes instead of 3.
+- Hunger and thirst drain more slowly: a full belly lasts about 60 minutes (was 26) and full water about 45 minutes (was 18).
+
 ## Build 12 changes
 
 - **Tab targeting.** Tab locks onto the nearest monster in front of you (Tab again for the next, Shift+Tab back). A red marker floats over it and a frame at the top shows its name, level, health and distance. Controller: tap **LT** to target (hold LT to sneak).

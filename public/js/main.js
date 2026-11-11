@@ -157,7 +157,7 @@ const col = { surf: [], walls: [], circ: [], ceil: [] };
 function addStruct(s) {
   const old = S.structs.get(s.id); if (old) scene.remove(old.g);
   S.structs.set(s.id, s); if (!S.bulk) { s.cap = capsOf(s); s.capKey = s.cap?.join(); }
-  placeMesh(s); syncStruct(s); if (!S.bulk) { rebuildCol(); if (STRUCTS[s.t].kind === 'slope' || STRUCTS[s.t].kind === 'roof' || STRUCTS[s.t].gable) refreshCaps(s.x, s.z); }
+  placeMesh(s); syncStruct(s); if (!S.bulk) { rebuildCol(); if (['slope', 'roof', 'wall'].includes(STRUCTS[s.t].kind)) refreshCaps(s.x, s.z); }
 }
 function syncStruct(s) { const u = s.g.userData; if (u.door) u.door.rotation.y = s.d.open ? -1.7 : 0; G.setCrop(s.g, s.d, Date.now() + S.off); }
 function rebuildCol() {
@@ -360,9 +360,9 @@ function stations() { const out = {}; for (const s of S.structs.values()) { cons
 // ---------- building ----------
 // Build mode (B) keeps a palette of pieces on screen. You aim with the dot in the middle of the screen: placing
 // snaps to what you look at, right-click removes the piece outlined in red, and F flies the camera without leaving.
-const BUILD_CATS = [['🧱', 'Walls', ['wood_foundation', 'wood_wall', 'wood_doorway', 'wood_window', 'wood_floor', 'wood_stairs']],
+const BUILD_CATS = [['🧱', 'Walls', ['wood_foundation', 'wood_wall', 'wood_short_wall', 'wood_doorway', 'wood_window', 'wood_floor', 'wood_stairs']],
   ['🏠', 'Roof', ['wood_roof_slope', 'wood_roof', 'wood_gable', 'stone_roof_slope', 'stone_roof', 'stone_gable']],
-  ['🪨', 'Stone', ['stone_foundation', 'stone_wall', 'stone_doorway', 'stone_window']],
+  ['🪨', 'Stone', ['stone_foundation', 'stone_wall', 'stone_short_wall', 'stone_doorway', 'stone_window']],
   ['🔥', 'Camp', ['campfire', 'workbench', 'chest', 'bed', 'torch_post', 'furnace', 'anvil', 'loom', 'well']],
   ['🌱', 'Farm', ['farm_plot', 'fence']], ['🚩', 'Clan', ['clan_banner']]];
 for (const id in STRUCTS) if (!BUILD_CATS.some(c => c[2].includes(id))) BUILD_CATS[3][2].push(id);
@@ -436,7 +436,7 @@ function placement() {
   let base = null, bd = 11; for (const s of S.structs.values()) if (STRUCTS[s.t].kind === 'foundation') { const q = Math.hypot(s.x - cx, s.z - cz); if (q < bd && Math.abs(s.y - hy) < 12) { bd = q; base = s.y; } }
   base ??= Math.max(heightAt(cx - 2, cz - 2), heightAt(cx + 2, cz - 2), heightAt(cx - 2, cz + 2), heightAt(cx + 2, cz + 2), .2) + .35;
   const occ = (kind, x, y, z, r) => { for (const s of S.structs.values()) if (STRUCTS[s.t].kind === kind && Math.abs(s.x - x) < .3 && Math.abs(s.z - z) < .3 && Math.abs(s.y - y) < .5 && (kind !== 'wall' || s.r === r)) return true; return false; };
-  const wallTop = () => { let top = -1; for (const s of S.structs.values()) { const sd = STRUCTS[s.t]; if (sd.kind !== 'wall' || sd.gable || s.t === 'fence') continue; if (Math.abs(s.x - cx) > 2.3 || Math.abs(s.z - cz) > 2.3 || Math.abs(s.x - cx) + Math.abs(s.z - cz) > 2.3) continue; const L = Math.round((s.y - base) / 3); if (L >= 0 && L <= 2) top = Math.max(top, L); } return top; };
+  const wallTop = () => { let top = -1; for (const s of S.structs.values()) { const sd = STRUCTS[s.t]; if (sd.kind !== 'wall' || sd.gable || sd.h === 2 || s.t === 'fence') continue; if (Math.abs(s.x - cx) > 2.3 || Math.abs(s.z - cz) > 2.3 || Math.abs(s.x - cx) + Math.abs(s.z - cz) > 2.3) continue; const L = Math.round((s.y - base) / 3); if (L >= 0 && L <= 2) top = Math.max(top, L); } return top; };
   const lvAt = (max, off = .25) => Math.max(0, Math.min(max, Math.floor((hy - base + off) / 3)));
   switch (d.kind) {
     case 'foundation': return { x: cx, y: base, z: cz, r: 0 };
@@ -449,10 +449,14 @@ function placement() {
         const sides = r === 1 ? [[x - 2, z], [x + 2, z]] : [[x, z - 2], [x, z + 2]], lx = r === 1 ? [0, -1] : [1, 0];
         for (const s of S.structs.values()) { const k = STRUCTS[s.t].kind; if (k !== 'slope' && k !== 'roof') continue; if (!sides.some(([sx, sz]) => Math.abs(s.x - sx) < .3 && Math.abs(s.z - sz) < .3)) continue;
           let shape; if (k === 'slope') { const dv = DIRS[s.r]; if (dv[0] * lx[1] - dv[1] * lx[0] !== 0) continue; shape = dv[0] * lx[0] + dv[1] * lx[1] > 0 ? 0 : 1; } else if (s.r % 2 !== r % 2) shape = 2; else continue;
-          let top = s.y; for (const w of S.structs.values()) { const wd = STRUCTS[w.t]; if (wd.kind === 'wall' && !wd.gable && w.t !== 'fence' && w.r === r && Math.abs(w.x - x) < .3 && Math.abs(w.z - z) < .3 && w.y + 3 <= s.y + .3) top = Math.min(top, Math.max(w.y + 3, s.y - 8)); }
+          let top = s.y; for (const w of S.structs.values()) { const wd = STRUCTS[w.t]; if (wd.kind === 'wall' && !wd.gable && w.t !== 'fence' && w.r === r && Math.abs(w.x - x) < .3 && Math.abs(w.z - z) < .3 && w.y + wd.h <= s.y + .3) top = Math.min(top, Math.max(w.y + wd.h, s.y - 8)); }
           const band = Math.max(0, Math.min(4, Math.round((s.y - top) / 2)));
           return { x, y: s.y - 2 * band, z, r, v: shape + 3 * band };
         }
+      }
+      if (d.h === 2) {        // a short wall goes on top of the highest wall on this edge, to fill up to the roof
+        let top = null; for (const w of S.structs.values()) { const wd = STRUCTS[w.t]; if (wd.kind === 'wall' && !wd.gable && w.t !== 'fence' && w.r === r && Math.abs(w.x - x) < .3 && Math.abs(w.z - z) < .3 && w.y >= base - .3) top = Math.max(top ?? -1e9, w.y + wd.h); }
+        return { x, y: top ?? base + 3 * lvAt(2), z, r };
       }
       let L = lvAt(d.gable ? 3 : 2); const max = d.gable ? 3 : 2; while (L < max && occ('wall', x, base + 3 * L, z, r)) L++;
       return { x, y: base + 3 * L, z, r, L };
@@ -498,8 +502,11 @@ function capsOf(s) {
   const side = sg => {
     if (at(s.x + sg * 4 * lx[0], s.z + sg * 4 * lx[1], s.y, roofish)) return -1;
     const ex = s.x + sg * 2 * lx[0], ez = s.z + sg * 2 * lx[1];
-    for (const o of S.structs.values()) if (STRUCTS[o.t].gable && Math.abs(o.x - ex) < .3 && Math.abs(o.z - ez) < .3 && o.y > s.y - 2 * n - .5 && o.y < s.y + .5) return -1;      // an old gable already closes it
-    return n;
+    let band = n;
+    for (const o of S.structs.values()) { const od = STRUCTS[o.t]; if (od.kind !== 'wall' || o.t === 'fence' || Math.abs(o.x - ex) > .3 || Math.abs(o.z - ez) > .3) continue;
+      if (od.gable && o.y > s.y - 2 * n - .5 && o.y < s.y + .5) return -1;      // an old gable already closes it
+      if (!od.gable && o.y < s.y - .1 && o.y + od.h >= s.y - .1) band = 0; }      // a wall already fills up to the roof: only the triangle is needed
+    return band;
   };
   return [side(-1), side(1)];
 }

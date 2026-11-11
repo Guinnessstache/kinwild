@@ -60,6 +60,10 @@ Each player picks a name and a PIN. Same name + PIN brings the character back on
 
 The "Next step" box walks new players through 19 steps from punching a tree to forging iron.
 
+## Build 11 changes
+
+- **Short Walls** (2 m, wood and stone) in the Walls and Stone tabs. Aim at a wall and the short wall sits on top of it — use them to fill the gap under a ridge or a higher row of roof slopes. The roof's end triangle then closes the rest.
+
 ## Build 10 changes
 
 - **New build mode.** Press **B** (controller: D-pad →) to start building. A palette at the bottom shows the pieces: **1–6** pick a type, the **mouse wheel** or **Q/E** (LB/RB) pick a piece. No more menus.

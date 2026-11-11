@@ -22,6 +22,7 @@ export const SKILLS = {
 // Small drawn icons where no emoji fits. Icons are only ever inserted as HTML.
 const SVG = b => `<svg class="svgi" viewBox="0 0 24 24" width="1em" height="1em">${b}</svg>`;
 const IC_HOE = SVG('<path d="M4.5 21.5 16 6" stroke="#8a5a33" stroke-width="2.6" stroke-linecap="round"/><path d="M13.2 3.2 20.8 8.8 21.6 15.2 17.2 13.6 15.6 9.2 11.6 6z" fill="#c3cad1" stroke="#59616a" stroke-width="1.1" stroke-linejoin="round"/>');
+const IC_SHORT = (f, e) => SVG(`<rect x="2" y="10" width="20" height="10.5" rx="1.5" fill="${f}" stroke="${e}" stroke-width="1.4"/><path d="M7 10v10.5M12 10v10.5M17 10v10.5" stroke="${e}" stroke-width="1.2"/><path d="M2 7l10-4 10 4" fill="none" stroke="#d6b65a" stroke-width="1.6" stroke-dasharray="2 1.6"/>`);
 const IC_WOODWALL = SVG('<rect x="2" y="3.5" width="20" height="17" rx="1.5" fill="#b9814f" stroke="#5e3d22" stroke-width="1.4"/><path d="M7 3.5v17M12 3.5v17M17 3.5v17" stroke="#5e3d22" stroke-width="1.2"/><path d="M2.5 8.5h19M2.5 15.5h19" stroke="#8a5a33" stroke-width="1.6"/>');
 const IC_GABLE = c => SVG(`<path d="M2 20 12 4 22 20z" fill="${c}" stroke="#3d2a18" stroke-width="1.4" stroke-linejoin="round"/><path d="M7 20v-8M12 20V4M17 20v-8" stroke="#3d2a18" stroke-width="1" opacity=".7"/>`);
 const IC_SLOPE = c => SVG(`<path d="M2 20 22 7v4L2 21z" fill="${c}" stroke="#3d2a18" stroke-width="1.3" stroke-linejoin="round"/><path d="M3 20h18V8.5" fill="none" stroke="#3d2a18" stroke-width="1" stroke-dasharray="2 2" opacity=".6"/>`);
@@ -223,6 +224,7 @@ export const STRUCTS = {
   wood_wall: B('Wood Wall', IC_WOODWALL, 'Building', 'wall', { plank: 4 }, 1, { h: 3 }),
   wood_doorway: B('Wood Door', '🚪', 'Building', 'wall', { plank: 5 }, 1, { h: 3, door: true }),
   wood_window: B('Wood Window', '🪟', 'Building', 'wall', { plank: 3 }, 2, { h: 3 }),
+  wood_short_wall: B('Wood Short Wall (2 m, fills under a roof)', IC_SHORT('#b9814f', '#5e3d22'), 'Building', 'wall', { plank: 3 }, 1, { h: 2 }),
   wood_floor: B('Wood Ceiling / Upper Floor', '⬛', 'Building', 'floor', { plank: 4 }, 2),
   wood_stairs: B('Wood Stairs', '🪜', 'Building', 'stairs', { plank: 6 }, 3),
   // Roofs: slopes rise 2 m across one square and snap together; a ridge caps the middle row of an odd-width house; gables close the ends.
@@ -233,6 +235,7 @@ export const STRUCTS = {
   stone_wall: B('Stone Wall', '🧱', 'Building', 'wall', { stone: 6, brick: 2 }, 6, { h: 3 }),
   stone_doorway: B('Stone Door', '🚪', 'Building', 'wall', { stone: 5, brick: 2, plank: 2 }, 6, { h: 3, door: true }),
   stone_window: B('Stone Window', '🪟', 'Building', 'wall', { stone: 4, brick: 2 }, 7, { h: 3 }),
+  stone_short_wall: B('Stone Short Wall (2 m, fills under a roof)', IC_SHORT('#a3a9ae', '#5c626a'), 'Building', 'wall', { stone: 4, brick: 1 }, 6, { h: 2 }),
   stone_roof_slope: B('Slate Roof Slope', IC_SLOPE('#59636e'), 'Building', 'slope', { stone: 4, plank: 1 }, 8),
   stone_roof: B('Slate Roof Ridge', IC_RIDGE('#59636e'), 'Building', 'roof', { stone: 4, plank: 2 }, 8),
   stone_gable: B('Stone Gable (roof end wall)', IC_GABLE('#a3a9ae'), 'Building', 'wall', { stone: 3, brick: 1 }, 6, { h: 1.5, gable: true }),

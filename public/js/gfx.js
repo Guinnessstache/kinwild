@@ -134,6 +134,7 @@ export function animateAnimal(g, dt, mv) {
 const WOOD = '#a9744a', PLANK = '#c49a6c', DARK = '#6e4a2e', STONE = '#9aa0a6', STONE2 = '#b3b8bd', THATCH = '#d6b65a';
 function wallParts(t, stone) {
   const c = stone ? STONE : PLANK, c2 = stone ? STONE2 : WOOD, T = .26, out = [];
+  if (t.endsWith('short_wall')) { out.push(P(box(4, 2, T), c, 0, 1, 0), P(box(4, .2, T + .06), c2, 0, 1.1, 0), P(box(.3, 2, .32), stone ? '#868c92' : DARK, -2, 1, 0), P(box(.3, 2, .32), stone ? '#868c92' : DARK, 2, 1, 0)); return out; }
   const post = x => out.push(P(box(.3, 3, .32), stone ? '#868c92' : DARK, x, 1.5, 0));
   if (t.endsWith('wall')) { out.push(P(box(4, 3, T), c, 0, 1.5, 0), P(box(4, .2, T + .06), c2, 0, 1, 0), P(box(4, .2, T + .06), c2, 0, 2.2, 0)); }
   else if (t.endsWith('window')) { out.push(P(box(4, 1.1, T), c, 0, .55, 0), P(box(4, .7, T), c, 0, 2.65, 0), P(box(1.25, 1.2, T), c, -1.375, 1.7, 0), P(box(1.25, 1.2, T), c, 1.375, 1.7, 0), P(box(1.6, .1, T + .1), c2, 0, 1.12, 0), P(box(.08, 1.2, .08), c2, 0, 1.7, 0)); }

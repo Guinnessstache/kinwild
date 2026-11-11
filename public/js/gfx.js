@@ -135,6 +135,12 @@ export function makeCharacter(look, armor, eq = []) {
     if (lg.q >= 2) gl.push(P(ico(.04), qc(lg), 0, -.4, .19));
     if (p.length) L.add(M(p)); if (gl.length) L.add(MG(gl));
   }
+  // ---- a torch in the off (left) hand ----
+  if (String(eq[3] || '').startsWith('torch')) {
+    const lh = new THREE.Group(); lh.position.set(0, -.68, .12); lh.rotation.x = Math.PI / 2 - .5; armL.add(lh);
+    lh.add(M([P(cyl(.03, .04, .6, 5), '#7a5536', 0, .2, 0)], false)); const fl = new THREE.Mesh(cone(.09, .25, 5), GLOW); fl.position.y = .6; lh.add(fl);
+    const l = new THREE.PointLight('#ffb060', 14, 16, 1.6); l.position.y = .7; lh.add(l); u.offFlame = fl;
+  }
   // ---- particles from Superior / Epic armor, and a ring for a full set ----
   for (const [x, anchor, o] of [[hd, headG, { cy: .1, r: .35, h: .5, mul: .6 }], [ch, body, { cy: 1.1, r: .5, h: 1 }], [lg, body, { cy: .45, r: .35, h: .5, mul: .6 }]]) if (x && x.q >= 2) addFx(u, anchor, x.st, x.q, o);
   if (hd && ch && lg && hd.d.mat === ch.d.mat && ch.d.mat === lg.d.mat) {
@@ -197,7 +203,8 @@ export function animateCharacter(g, dt, speed, mode) {    // mode 0 idle 1 walk 
   if (g.visible) for (const f of u.fx) stepFx(f, u.t);
   if (u.ring) { u.ring.rotation.z += dt * .6; u.ring.material.opacity = .6 + .3 * Math.sin(u.t * 2.5); }
   const amp = Math.min(1, speed / 5) * (mode === 4 ? .5 : .9), s = Math.sin(u.phase);
-  u.legL.rotation.x = s * amp; u.legR.rotation.x = -s * amp; u.armL.rotation.x = -s * amp * .8;
+  u.legL.rotation.x = s * amp; u.legR.rotation.x = -s * amp; u.armL.rotation.x = u.offFlame ? -.35 + s * amp * .15 : -s * amp * .8;
+  if (u.offFlame) { const k = 1 + Math.sin(u.t * 13) * .12; u.offFlame.scale.set(k, 1 + Math.sin(u.t * 17) * .2, k); }
   u.swing = Math.max(0, u.swing - dt * 3.2);
   u.armR.rotation.x = u.swing > 0 ? -2.4 * Math.sin(u.swing * Math.PI) - .3 : (u.held ? -.35 : s * amp * .8);
   u.body.position.y = (mode === 3 ? -.22 : 0) + Math.abs(Math.cos(u.phase)) * .05 * amp + (speed < .1 ? Math.sin(u.phase * .5) * .012 : 0);

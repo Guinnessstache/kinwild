@@ -78,7 +78,7 @@ export const ITEMS = {
   hammer: T('Building Hammer', '🔨', 'hammer', 0, 2, 400), hoe: T('Hoe', IC_HOE, 'hoe', 0, 2, 120),
   stone_spear: T('Stone Spear', '🔱', 'spear', 0, 6, 60, 3.8), iron_sword: T('Iron Sword', '🗡️', 'sword', 0, 11, 200, 3.2),
   bow: T('Bow', '🏹', 'bow', 0, 8, 120), arrow: { n: 'Arrow', i: '➶' },
-  fishing_rod: T('Fishing Rod', '🎣', 'rod', 0, 1, 60), torch: T('Torch', '🔥', 'torch', 0, 2, 300),
+  fishing_rod: T('Fishing Rod', '🎣', 'rod', 0, 1, 60), torch: { ...T('Torch', '🔥', 'torch', 0, 2, 300), slot: 'offhand' },
   waterskin: { n: 'Waterskin', i: '🫗', dur: 5, empty: true, tool: 'water' },
   bandage: { n: 'Bandage', i: '🩹', heal: 35 },
   wood_staff: T('Wooden Staff', '🪄', 'staff', 0, 4, 150, 14), iron_spear: T('Iron Spear', '🔱', 'spear', 0, 10, 200, 3.8),

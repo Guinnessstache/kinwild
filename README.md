@@ -60,6 +60,12 @@ Each player picks a name and a PIN. Same name + PIN brings the character back on
 
 The "Next step" box walks new players through 19 steps from punching a tree to forging iron.
 
+## Build 18 changes
+
+- **Off-hand torch.** A new Off-hand slot under Wearing. Right-click a torch (or click with it on the action bar) to hold it in your left hand: it stays lit while your weapon or tools are out, and other players see it. Right-click it in the Wearing panel to put it away.
+- Carrying a lit torch now really keeps hunting wolves away, as the torch's description always said.
+- Food and water bars show numbers (build 17).
+
 ## Build 16 changes
 
 - **Gear shows on your character.** Every armor piece has its own look by material: cloth hood/robe/leggings (silk: wizard hat, gold trim), leather cap/tunic with shoulder pads and knee pads (hardened: face mask, studs), plate helm with visor, pauldrons and greaves (steel: red plume, gold trim).

@@ -110,7 +110,7 @@ export class Game {
     } };
   }
   held(p) { return p.inv[p.sel]; }
-  pub(p) { const c = this.clans[p.clan]; return { id: p.id, name: p.name, x: r2(p.x), y: r2(p.y), z: r2(p.z), r: p.r, look: p.look, tag: c?.tag || '', col: c?.color || '', armor: ITEMS[p.equip.chest?.id]?.mat || '', eq: ['head', 'chest', 'legs'].map(k => gearKey(p.equip[k])), lv: this.plvl(p) }; }
+  pub(p) { const c = this.clans[p.clan]; return { id: p.id, name: p.name, x: r2(p.x), y: r2(p.y), z: r2(p.z), r: p.r, look: p.look, tag: c?.tag || '', col: c?.color || '', armor: ITEMS[p.equip.chest?.id]?.mat || '', eq: ['head', 'chest', 'legs', 'offhand'].map(k => gearKey(p.equip[k])), lv: this.plvl(p) }; }
   apub(a) { return { id: a.id, t: a.t, x: r2(a.x), y: r2(a.y), z: r2(a.z), r: a.ang, L: a.L, hp: Math.round(100 * a.hp / a.max) }; }
   priv(p) { return { name: p.name, x: p.x, y: p.y, z: p.z, inv: p.inv, equip: p.equip, skills: p.skills, hp: p.hp, mp: p.mp ?? 100, en: p.en ?? 100, max: this.maxHp(p), hunger: p.hunger, thirst: p.thirst, quest: p.quest, look: p.look, known: p.known, buff: p.buff || null, recallAt: p.recallAt || 0, perm: p.perm }; }
   spub(s) { return { ...s, d: this.pd(s), on: this.players.get(s.o)?.name || s.on, c: this.clanOf(s.o), cc: this.clans[this.clanOf(s.o)]?.color || '' }; }
@@ -279,7 +279,9 @@ export class Game {
     }
   }
   isNight() { return this.time < 0.22 || this.time > 0.79; }
-  nearFire(p) { for (const s of this.structs.values()) if ((s.t === 'campfire' || s.t === 'torch_post') && Math.hypot(s.x - p.x, s.z - p.z) < 12) return true; return false; }
+  nearFire(p) {
+    if (p.equip?.offhand?.id === 'torch' || this.held(p)?.id === 'torch') return true;       // a lit torch keeps hunting wolves away, like the help says
+    for (const s of this.structs.values()) if ((s.t === 'campfire' || s.t === 'torch_post') && Math.hypot(s.x - p.x, s.z - p.z) < 12) return true; return false; }
   hitAnimal(a, dmg, p, sk = 'melee') {
     const d = ANIMALS[a.t], now = Date.now();
     if (a.ret) { this.fx('hit', a.x, a.y + .6, a.z, { c: '#bbbbbb' }); return this.toast(p, 'It is running home — it can’t be hurt until it gets there'); }      // evading
@@ -410,7 +412,7 @@ export class Game {
   onInvMove(p, d) {
     if (!Array.isArray(d.f) || !Array.isArray(d.t)) return;
     if (d.f[0] === 2) {           // take off armor or a bag (f[1] is the slot name)
-      const k = String(d.f[1]), it = p.equip[k], j = d.t[1] | 0; if (!it || !['head', 'chest', 'legs', 'bag'].includes(k) || d.t[0] !== 0 || j < 0 || j >= p.inv.length || p.inv[j]) return;
+      const k = String(d.f[1]), it = p.equip[k], j = d.t[1] | 0; if (!it || !['head', 'chest', 'legs', 'bag', 'offhand'].includes(k) || d.t[0] !== 0 || j < 0 || j >= p.inv.length || p.inv[j]) return;
       if (k === 'bag') { if (j >= INV || p.inv.slice(INV).some(Boolean)) return this.toast(p, 'Empty the extra bag slots first', 'bad'); p.inv.length = INV; }
       p.inv[j] = it; p.equip[k] = null; p._inv = p._vit = true; this.io.to('game').emit('pu', this.pub(p)); return;
     }

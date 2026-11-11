@@ -186,7 +186,7 @@ function groundAt(x, z, py) {
 function start(init) {
   S.id = init.id; S.me = init.me; S.time = init.time; S.off = init.now - Date.now(); S.clan = init.clan.clan; S.invites = init.clan.invites;
   me.x = init.me.x; me.z = init.me.z; me.y = heightAt(me.x, me.z);
-  refreshMe({ name: init.me.name, look: init.me.look, armor: ITEMS[init.me.equip.chest?.id]?.mat, eq: ['head', 'chest', 'legs'].map(k => gearKey(init.me.equip[k])), tag: S.clan?.tag, col: S.clan?.color });
+  refreshMe({ name: init.me.name, look: init.me.look, armor: ITEMS[init.me.equip.chest?.id]?.mat, eq: ['head', 'chest', 'legs', 'offhand'].map(k => gearKey(init.me.equip[k])), tag: S.clan?.tag, col: S.clan?.color });
   S.party = init.party.party; S.pinv = init.party.inv; S.voice = new Set(init.voice); partyHud();
   for (const id of init.dead) { S.dead.add(id); world.setNode(id, false); }
   init.players.forEach(addPlayer); init.animals.forEach(addAnimal); S.bulk = true; init.structs.forEach(addStruct); S.bulk = false; rebuildCol(); refreshCaps();
